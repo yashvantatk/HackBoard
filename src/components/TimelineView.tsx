@@ -14,14 +14,32 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [svgContent, setSvgContent] = useState<string>('');
   const [renderError, setRenderError] = useState<string | null>(null);
+  const [renderKey, setRenderKey] = useState(0);
 
-  // Initialize mermaid once
+  // Re-render when window resizes
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    const handleResize = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        setRenderKey((k) => k + 1);
+      }, 150);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      clearTimeout(timer);
+    };
+  }, []);
+
+  // Initialize mermaid with larger font sizes, taller bar height, and useMaxWidth: false
   useEffect(() => {
     mermaid.initialize({
       startOnLoad: false,
       theme: 'dark',
       securityLevel: 'loose',
-      fontFamily: 'monospace',
+      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
       themeVariables: {
         darkMode: true,
         background: '#09090b',
@@ -36,13 +54,14 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
         useMaxWidth: false,
         axisFormat: '%a %d',
         tickInterval: '1day',
-        barHeight: 28,
-        barGap: 8,
-        topPadding: 45,
-        leftPadding: 140,
-        gridLineStartPadding: 35,
-        fontSize: 12,
-        sectionFontSize: 13,
+        barHeight: 36,
+        barGap: 10,
+        topPadding: 50,
+        leftPadding: 180,
+        gridLineStartPadding: 40,
+        fontSize: 14,
+        sectionFontSize: 16,
+        numberSectionStyles: 4,
       },
     });
   }, []);
@@ -63,7 +82,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
       '    dateFormat YYYY-MM-DD-HH:mm',
       '    axisFormat %a %d',
       '    tickInterval 1day',
-      '    todayMarker stroke-width:2px,stroke:#06b6d4,opacity:0.9',
+      '    todayMarker stroke-width:3px,stroke:#06b6d4,opacity:0.95',
     ];
 
     let taskIndex = 0;
@@ -76,41 +95,30 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
       const tasks = h.tasks || [];
 
       if (tasks.length === 0) {
-        // Fallback bar for hackathon without tasks
-        const start = new Date(deadlineDate.getTime() - 24 * 60 * 60 * 1000);
-        lines.push(`    Deadline Milestone :crit, active, task_${taskIndex++}, ${formatISTGantt(start)}, ${formatISTGantt(deadlineDate)}`);
+        // Fallback milestone starting at current time ending at deadline
+        lines.push(`    Deadline Milestone :crit, active, task_${taskIndex++}, ${formatISTGantt(now)}, ${formatISTGantt(deadlineDate)}`);
         continue;
       }
 
-      // Schedule tasks sequentially backwards from deadline or forward from now
+      // Schedule tasks starting at the current time so bars spread horizontally across the container
       let cumulativeHours = 0;
       for (let i = 0; i < tasks.length; i++) {
         const task = tasks[i];
         const rawTitle = cleanStr(task.title);
-        // Cut long task names with an ellipsis to keep Mermaid chart readable
-        const tTitle = rawTitle.length > 28 ? rawTitle.substring(0, 25) + '...' : rawTitle;
+        // Truncate long task names with ellipsis for crisp readability
+        const tTitle = rawTitle.length > 26 ? rawTitle.substring(0, 23) + '...' : rawTitle;
         const estHours = task.estimateHours && task.estimateHours > 0 ? task.estimateHours : 1;
 
-        // Calculate a realistic time window
-        let taskStart: Date;
-        let taskEnd: Date;
+        // Start from current time (now) so the chart spans from now to deadline
+        const taskStart = new Date(now.getTime() + cumulativeHours * 60 * 60 * 1000);
+        cumulativeHours += estHours;
+        let taskEnd = new Date(now.getTime() + cumulativeHours * 60 * 60 * 1000);
 
-        if (task.status === 'done') {
-          // Completed task in the past
-          taskEnd = new Date(now.getTime() - (tasks.length - i) * 3 * 60 * 60 * 1000);
-          taskStart = new Date(taskEnd.getTime() - estHours * 60 * 60 * 1000);
-        } else if (task.status === 'doing') {
-          // Currently in progress
-          taskStart = new Date(now.getTime() - 30 * 60 * 1000);
-          taskEnd = new Date(taskStart.getTime() + estHours * 60 * 60 * 1000);
-        } else {
-          // To-do task placed between now and deadline
-          taskStart = new Date(now.getTime() + cumulativeHours * 60 * 60 * 1000);
-          cumulativeHours += estHours;
-          taskEnd = new Date(taskStart.getTime() + estHours * 60 * 60 * 1000);
-          if (taskEnd.getTime() > deadlineDate.getTime()) {
-            taskEnd = deadlineDate;
-          }
+        if (taskEnd.getTime() > deadlineDate.getTime()) {
+          taskEnd = deadlineDate;
+        }
+        if (taskEnd.getTime() <= taskStart.getTime()) {
+          taskEnd = new Date(taskStart.getTime() + 30 * 60 * 1000);
         }
 
         const id = `t_${taskIndex++}`;
@@ -128,7 +136,16 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
       try {
         const uniqueId = `mermaid-gantt-${Date.now()}`;
         const { svg } = await mermaid.render(uniqueId, diagramDefinition);
-        setSvgContent(svg);
+        
+        // Ensure SVG scales to 100% of container width and remove restrictive inline max-width
+        const fluidSvg = svg
+          .replace(/max-width:\s*[^;"]+;?/gi, '')
+          .replace(/<svg\s+([^>]*?)style="([^"]*?)"/gi, (match, prefix, style) => {
+            const cleanStyle = style.replace(/max-width:\s*[^;]+;?/gi, '').trim();
+            return `<svg ${prefix} style="${cleanStyle}; width: 100%; min-width: 100%; display: block;"`;
+          });
+
+        setSvgContent(fluidSvg);
         setRenderError(null);
       } catch (err: unknown) {
         console.warn('Mermaid rendering issue, using visual fallback:', err);
@@ -137,7 +154,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
     };
 
     renderChart();
-  }, [hackathons]);
+  }, [hackathons, renderKey]);
 
   if (hackathons.length === 0) {
     return (
@@ -176,7 +193,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
         {!renderError && svgContent ? (
           <div
             ref={containerRef}
-            className="mermaid-wrapper w-full min-w-full flex items-center justify-center min-h-[400px] [&_svg]:w-full [&_svg]:min-w-[650px] [&_svg]:h-auto [&_svg]:min-h-[380px]"
+            className="mermaid-wrapper w-full overflow-hidden [&_svg]:!w-full [&_svg]:!max-w-none [&_svg]:!h-auto [&_svg]:block"
             dangerouslySetInnerHTML={{ __html: svgContent }}
           />
         ) : (

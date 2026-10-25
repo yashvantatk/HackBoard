@@ -240,8 +240,8 @@ export function parseVoiceCommand(
     };
   }
 
-  // 3. Detect Questions: "What now?", "What should I do next?", "I have 2 hours what should I do"
-  if (/(?:what\s+now|what\s+should\s+i\s+do|what\s+to\s+work\s+on|what\s+should\s+i\s+work\s+on|what's\s+on\s+my\s+plate|what\s+is\s+on\s+my\s+plate|what\s+next|next\s+deadline|status\s+report|how\s+much\s+time|i\s+(?:have|got)\s+\d+)/i.test(input)) {
+  // 3. Detect Questions: "What now?", "What should I do next?", "I have 2 hours what should I do", "next", "status"
+  if (/(?:what\s+now|what\s+next|what's\s+next|whats\s+next|what\s+(?:should|can|do)\s+i\s+do|what\s+to\s+do|what\s+to\s+work\s+on|what\s+should\s+i\s+work\s+on|what['’]?s\s+on\s+my\s+plate|what\s+is\s+on\s+my\s+plate|next\s+task|next\s+deadline|^next$|^status$|status\s+report|how\s+much\s+time|i\s+(?:have|got)\s+\d+)/i.test(input)) {
     return handleQuestionCommand(input, existingHackathons, referenceDate);
   }
 

@@ -133,7 +133,47 @@ export const CommandBar: React.FC<CommandBarProps> = ({
     }
   }, []);
 
-  // Global '/' hotkey to focus textarea
+  const isSubmittingRef = useRef(false);
+  const handleSubmitRef = useRef<(overrideText?: string, forceExecute?: boolean) => void>(() => {});
+
+  const handleSubmit = (overrideText?: string, forceExecute = false) => {
+    if (isSubmittingRef.current && !forceExecute) return;
+    isSubmittingRef.current = true;
+    setTimeout(() => {
+      isSubmittingRef.current = false;
+    }, 120);
+
+    const rawText = overrideText !== undefined
+      ? overrideText
+      : (textareaRef.current?.value ?? input);
+    const textToSubmit = rawText.trim();
+    if (!textToSubmit) return;
+
+    const parsed = parseVoiceCommand(textToSubmit, hackathons);
+
+    // "Ctrl plus Enter and Cmd plus Enter should run the command straight away when confidence is high.
+    // Only show the preview and wait when confidence is low."
+    if (parsed.confidence === 'high' || forceExecute) {
+      onExecuteCommand(parsed, textToSubmit);
+      setInput('');
+      if (textareaRef.current) {
+        textareaRef.current.value = '';
+      }
+      setActivePreview(null);
+    } else {
+      setActivePreview(parsed);
+    }
+
+    // Stop browser mic if recording
+    if (isListening && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    }
+  };
+
+  handleSubmitRef.current = handleSubmit;
+
+  // Global '/' hotkey to focus textarea, and fallback listener for Ctrl+Enter
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (
@@ -142,6 +182,13 @@ export const CommandBar: React.FC<CommandBarProps> = ({
       ) {
         e.preventDefault();
         textareaRef.current?.focus();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        const target = e.target;
+        if (target === textareaRef.current || target instanceof HTMLTextAreaElement) {
+          e.preventDefault();
+          const latestValue = textareaRef.current?.value || (target as HTMLTextAreaElement).value || '';
+          handleSubmitRef.current(latestValue);
+        }
       }
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
@@ -152,30 +199,9 @@ export const CommandBar: React.FC<CommandBarProps> = ({
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
       e.stopPropagation();
-      handleSubmit();
-    }
-  };
-
-  const handleSubmit = (overrideText?: string, forceExecute = false) => {
-    const textToSubmit = (overrideText ?? input).trim();
-    if (!textToSubmit) return;
-
-    const parsed = parseVoiceCommand(textToSubmit, hackathons);
-
-    // "Ctrl plus Enter and Cmd plus Enter should run the command straight away when confidence is high.
-    // Only show the preview and wait when confidence is low."
-    if (parsed.confidence === 'high' || forceExecute) {
-      onExecuteCommand(parsed, textToSubmit);
-      setInput('');
-      setActivePreview(null);
-    } else {
-      setActivePreview(parsed);
-    }
-
-    // Stop browser mic if recording
-    if (isListening && recognitionRef.current) {
-      recognitionRef.current.stop();
-      setIsListening(false);
+      // Always read latest value directly from textarea to eliminate stale state
+      const latestText = e.currentTarget.value || textareaRef.current?.value || input;
+      handleSubmit(latestText);
     }
   };
 

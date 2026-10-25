@@ -24,6 +24,7 @@ import { OverbookedBanner } from '../components/OverbookedBanner';
 import { JudgeTourStrip } from '../components/JudgeTourStrip';
 import { SharedBoardBanner } from '../components/SharedBoardBanner';
 import { PastHackathonsDrawer } from '../components/PastHackathonsDrawer';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { downloadCalendarIcs } from '../lib/calendar';
 import { copyShareLink, decodeBoardFromHash, clearSharedHash } from '../lib/share';
 import { triggerCompletionConfetti, triggerMegaConfetti } from '../lib/confetti';
@@ -68,6 +69,15 @@ export default function HackboardPage() {
   const [actionNotification, setActionNotification] = useState<{
     type: 'success' | 'info' | 'warning';
     message: string;
+  } | null>(null);
+  const [confirmModalConfig, setConfirmModalConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmLabel: string;
+    isDestructive?: boolean;
+    icon?: 'alert' | 'reset';
+    onConfirm: () => void;
   } | null>(null);
 
   // Snapshot to restore board exactly when guided tour ends or is skipped
@@ -517,18 +527,36 @@ export default function HackboardPage() {
   };
 
   const handleResetDemo = () => {
-    if (confirm('Reset your board to default demo hackathons? (Meta, Nebius NVIDIA, Wispr)')) {
-      resetToDemo();
-      triggerCompletionConfetti();
-      showNotification('Preloaded demo board: Meta, Nebius NVIDIA, Wispr Challenge.', 'success');
-    }
+    setConfirmModalConfig({
+      isOpen: true,
+      title: 'Reset Demo Board?',
+      message: 'This will restore the default demo hackathons (Meta Global AI, Nebius NVIDIA, Wispr Challenge) and reset task progress.',
+      confirmLabel: 'Reset Demo',
+      isDestructive: true,
+      icon: 'reset',
+      onConfirm: () => {
+        resetToDemo();
+        triggerCompletionConfetti();
+        showNotification('Preloaded demo board: Meta, Nebius NVIDIA, Wispr Challenge.', 'success');
+        setConfirmModalConfig(null);
+      },
+    });
   };
 
   const handleClearHistory = () => {
-    if (confirm('Clear all war room history entries?')) {
-      clearHistory();
-      showNotification('History log cleared.', 'info');
-    }
+    setConfirmModalConfig({
+      isOpen: true,
+      title: 'Clear Command History?',
+      message: 'This will clear all dictation and command history logs from this browser.',
+      confirmLabel: 'Clear History',
+      isDestructive: true,
+      icon: 'alert',
+      onConfirm: () => {
+        clearHistory();
+        showNotification('History log cleared.', 'info');
+        setConfirmModalConfig(null);
+      },
+    });
   };
 
   if (!isMounted) {
@@ -680,6 +708,7 @@ export default function HackboardPage() {
 
             {currentView === 'timeline' && (
               <TimelineView
+                key={`timeline-${activeHackathons.length}`}
                 hackathons={activeHackathons}
               />
             )}
@@ -746,6 +775,18 @@ export default function HackboardPage() {
       <KeyboardShortcutsModal
         isOpen={isShortcutsOpen}
         onClose={() => setIsShortcutsOpen(false)}
+      />
+
+      {/* In-App Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={Boolean(confirmModalConfig?.isOpen)}
+        title={confirmModalConfig?.title || 'Confirm Action'}
+        message={confirmModalConfig?.message || 'Are you sure you want to proceed?'}
+        confirmLabel={confirmModalConfig?.confirmLabel || 'Confirm'}
+        isDestructive={confirmModalConfig?.isDestructive}
+        icon={confirmModalConfig?.icon}
+        onConfirm={() => confirmModalConfig?.onConfirm()}
+        onCancel={() => setConfirmModalConfig(null)}
       />
     </div>
   );
