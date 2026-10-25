@@ -1,6 +1,7 @@
 import { parseVoiceCommand } from '../src/lib/parser';
 import { getAliveDemoHackathons } from '../src/lib/storage';
-import { ActionType } from '../src/types/index';
+import { getRemainingWorkHours } from '../src/lib/whatnow';
+import { ActionType, Hackathon } from '../src/types/index';
 
 const referenceDate = new Date('2026-10-25T23:04:56+05:30');
 const demoHackathons = getAliveDemoHackathons(referenceDate);
@@ -306,7 +307,86 @@ console.log('='.repeat(70));
 console.log(`TEST SUITE RESULTS: ${passed} PASSED / ${TEST_CASES.length} TOTAL (${Math.round((passed / TEST_CASES.length) * 100)}%)`);
 console.log('='.repeat(70));
 
-if (failed > 0) {
+// --------------------------------------------------------------------
+// UNIT TEST: What Now Remaining Work Calculation (Bug 3 Verification)
+// --------------------------------------------------------------------
+console.log('\n' + '='.repeat(70));
+console.log('UNIT TEST: WHAT NOW REMAINING WORK HOURS (TODO + DOING ONLY)');
+console.log('='.repeat(70));
+
+let mathPassed = 0;
+let mathFailed = 0;
+
+// Test 1: Verify Meta Global AI demo hackathon unfinished work equals 5 hours
+const metaHackathon = demoHackathons.find((h) => h.id === 'demo-meta-global-ai');
+if (!metaHackathon) {
+  console.log('[FAIL] Could not find Meta Global AI Hackathon in demo data');
+  mathFailed++;
+} else {
+  const metaRemaining = getRemainingWorkHours(metaHackathon);
+  const doneTasks = metaHackathon.tasks.filter((t) => t.status === 'done');
+  const unfinishedTasks = metaHackathon.tasks.filter((t) => t.status === 'todo' || t.status === 'doing');
+  const doneHours = doneTasks.reduce((sum, t) => sum + (t.estimateHours || 1), 0);
+  const unfinishedHours = unfinishedTasks.reduce((sum, t) => sum + (t.estimateHours || 1), 0);
+
+  if (metaRemaining === 5 && unfinishedHours === 5 && doneHours === 2) {
+    console.log(`[PASS] Meta Hackathon remaining work is exactly ${metaRemaining}h (5h unfinished, 2h done ignored)`);
+    mathPassed++;
+  } else {
+    console.log(`[FAIL] Meta Hackathon remaining work expected 5h, got ${metaRemaining}h (unfinished: ${unfinishedHours}h, done: ${doneHours}h)`);
+    mathFailed++;
+  }
+}
+
+// Test 2: Verify that Done tasks are strictly excluded from remaining work
+const customHackathon: Hackathon = {
+  id: 'test-custom',
+  name: 'Test Hackathon',
+  deadline: new Date(Date.now() + 86400000).toISOString(),
+  createdAt: new Date().toISOString(),
+  tasks: [
+    { id: '1', title: 'Task in To Do', status: 'todo', estimateHours: 2, createdAt: new Date().toISOString() },
+    { id: '2', title: 'Task in Doing', status: 'doing', estimateHours: 3, createdAt: new Date().toISOString() },
+    { id: '3', title: 'Task in Done (Large)', status: 'done', estimateHours: 10, createdAt: new Date().toISOString() },
+    { id: '4', title: 'Task in Done (Small)', status: 'done', estimateHours: 4, createdAt: new Date().toISOString() },
+  ],
+};
+
+const customRemaining = getRemainingWorkHours(customHackathon);
+if (customRemaining === 5) {
+  console.log(`[PASS] Custom hackathon remaining work is ${customRemaining}h (2h todo + 3h doing, 14h done ignored)`);
+  mathPassed++;
+} else {
+  console.log(`[FAIL] Custom hackathon expected 5h, got ${customRemaining}h`);
+  mathFailed++;
+}
+
+// Test 3: If all tasks are Done, remaining work is 0
+const allDoneHackathon: Hackathon = {
+  id: 'test-all-done',
+  name: 'Completed Hackathon',
+  deadline: new Date(Date.now() + 86400000).toISOString(),
+  createdAt: new Date().toISOString(),
+  tasks: [
+    { id: '1', title: 'Done 1', status: 'done', estimateHours: 5, createdAt: new Date().toISOString() },
+    { id: '2', title: 'Done 2', status: 'done', estimateHours: 8, createdAt: new Date().toISOString() },
+  ],
+};
+
+const allDoneRemaining = getRemainingWorkHours(allDoneHackathon);
+if (allDoneRemaining === 0) {
+  console.log(`[PASS] All-done hackathon remaining work is ${allDoneRemaining}h`);
+  mathPassed++;
+} else {
+  console.log(`[FAIL] All-done hackathon expected 0h, got ${allDoneRemaining}h`);
+  mathFailed++;
+}
+
+console.log('='.repeat(70));
+console.log(`WHAT NOW MATH TESTS: ${mathPassed} PASSED / ${mathPassed + mathFailed} TOTAL`);
+console.log('='.repeat(70));
+
+if (failed > 0 || mathFailed > 0) {
   process.exit(1);
 } else {
   process.exit(0);

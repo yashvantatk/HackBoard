@@ -9,11 +9,12 @@ export interface OverbookedAlert {
 }
 
 /**
- * Calculates total remaining work hours for a hackathon's incomplete tasks
+ * Calculates total remaining work hours for a hackathon's incomplete tasks.
+ * Strictly counts only tasks in To Do and Doing, never Done.
  */
 export function getRemainingWorkHours(hackathon: Hackathon): number {
   return hackathon.tasks
-    .filter((t) => t.status !== 'done')
+    .filter((t) => t.status === 'todo' || t.status === 'doing')
     .reduce((sum, t) => sum + (t.estimateHours && t.estimateHours > 0 ? t.estimateHours : 1), 0);
 }
 

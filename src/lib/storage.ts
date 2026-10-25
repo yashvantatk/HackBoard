@@ -2,9 +2,9 @@ import { Hackathon, HistoryEntry } from '../types/index';
 import { createISTDate } from './time';
 
 const STORAGE_KEYS = {
-  HACKATHONS: 'hackboard_hackathons_v3',
-  HISTORY: 'hackboard_history_v3',
-  INITIALIZED: 'hackboard_initialized_v3',
+  HACKATHONS: 'hackboard_hackathons_v4',
+  HISTORY: 'hackboard_history_v4',
+  INITIALIZED: 'hackboard_initialized_v4',
 };
 
 /**
@@ -66,7 +66,7 @@ export function getAliveDemoHackathons(now: Date = new Date()): Hackathon[] {
           id: 'meta-t2',
           title: 'Fine-tune Llama 3.3 model on custom evaluation dataset',
           status: 'doing',
-          estimateHours: 4,
+          estimateHours: 2,
           createdAt: new Date('2026-10-24T12:00:00Z').toISOString(),
         },
         {

@@ -31,6 +31,29 @@ import { formatIST } from '../lib/time';
 import { getOverbookedHackathons, getWhatNowRecommendation } from '../lib/whatnow';
 import { CheckCircle2, AlertCircle, Sparkles, X, Heart } from 'lucide-react';
 
+function normalizeTaskForComparison(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/\b(?:the|a|an)\b/gi, ' ')
+    .replace(/[^a-z0-9]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isTaskAlreadyInHackathon(existingTasks: Task[], newTitle: string): boolean {
+  const normNew = normalizeTaskForComparison(newTitle);
+  if (!normNew) return false;
+
+  return existingTasks.some((t) => {
+    const normExisting = normalizeTaskForComparison(t.title);
+    if (normExisting === normNew) return true;
+    if (normExisting.includes(normNew) || normNew.includes(normExisting)) return true;
+    const newTokens = normNew.split(' ').filter((w) => w.length > 2);
+    if (newTokens.length > 0 && newTokens.every((w) => normExisting.includes(w))) return true;
+    return false;
+  });
+}
+
 export default function HackboardPage() {
   const [hackathons, setHackathons] = useState<Hackathon[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -46,6 +69,20 @@ export default function HackboardPage() {
     type: 'success' | 'info' | 'warning';
     message: string;
   } | null>(null);
+
+  // Snapshot to restore board exactly when guided tour ends or is skipped
+  const tourSnapshotRef = React.useRef<Hackathon[] | null>(null);
+
+  const handleStartTour = () => {
+    tourSnapshotRef.current = JSON.parse(JSON.stringify(getHackathons()));
+  };
+
+  const handleEndTour = () => {
+    if (tourSnapshotRef.current) {
+      saveHackathons(tourSnapshotRef.current);
+      tourSnapshotRef.current = null;
+    }
+  };
 
   // Sync state from storage or URL hash
   const reloadFromStorage = useCallback(() => {
@@ -229,22 +266,35 @@ export default function HackboardPage() {
         const targetName = parsed.targetHackathonName;
 
         let found = false;
+        const skippedTitles: string[] = [];
+        let addedCount = 0;
+
         const updated = currentHackathons.map((h) => {
           if (h.id === targetId || (targetName && h.name.toLowerCase() === targetName.toLowerCase())) {
             found = true;
             const updatedDeadline = parsed.deadlineIso || h.deadline;
-            const newTasks: Task[] = (parsed.tasksToCreate || []).map((t, idx) => ({
-              id: `t-${Date.now()}-${idx}`,
-              title: t.title,
-              status: 'todo',
-              estimateHours: t.estimateHours || 1,
-              createdAt: new Date().toISOString(),
-            }));
+            const newTasksToAppend: Task[] = [];
+
+            for (const t of (parsed.tasksToCreate || [])) {
+              if (isTaskAlreadyInHackathon(h.tasks, t.title)) {
+                skippedTitles.push(t.title);
+              } else {
+                newTasksToAppend.push({
+                  id: `t-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                  title: t.title,
+                  status: 'todo',
+                  estimateHours: t.estimateHours || 1,
+                  createdAt: new Date().toISOString(),
+                });
+              }
+            }
+
+            addedCount = newTasksToAppend.length;
 
             return {
               ...h,
               deadline: updatedDeadline,
-              tasks: [...h.tasks, ...newTasks],
+              tasks: [...h.tasks, ...newTasksToAppend],
             };
           }
           return h;
@@ -252,7 +302,15 @@ export default function HackboardPage() {
 
         if (found) {
           saveHackathons(updated);
-          const summary = parsed.summary;
+          let summary = '';
+          if (addedCount > 0) {
+            summary = `Added ${addedCount} new task${addedCount > 1 ? 's' : ''} to "${targetName}"${skippedTitles.length > 0 ? ` (${skippedTitles.join(', ')} already existed)` : ''}.`;
+          } else if (skippedTitles.length > 0) {
+            summary = `Task(s) (${skippedTitles.join(', ')}) were already on "${targetName}".`;
+          } else {
+            summary = parsed.summary;
+          }
+
           addHistoryEntry(rawInput, summary, 'update_hackathon', {
             hackathonName: targetName,
             deadline: parsed.deadlineIso,
@@ -550,6 +608,8 @@ export default function HackboardPage() {
 
         {/* Feature Five: Judge 60-Second Guided Tour Strip */}
         <JudgeTourStrip
+          onStartTour={handleStartTour}
+          onEndTour={handleEndTour}
           onRunStep1Command={(sampleText) => {
             const parsed = {
               type: 'update_hackathon' as const,

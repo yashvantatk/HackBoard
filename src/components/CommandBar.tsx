@@ -133,24 +133,9 @@ export const CommandBar: React.FC<CommandBarProps> = ({
     }
   }, []);
 
-  // Update live preview when input changes
-  useEffect(() => {
-    const trimmed = input.trim();
-    if (trimmed.length > 5) {
-      const parsed = parseVoiceCommand(trimmed, hackathons);
-      if (parsed.type !== 'unknown') {
-        setActivePreview(parsed);
-      } else {
-        setActivePreview(null);
-      }
-    } else {
-      setActivePreview(null);
-    }
-  }, [input, hackathons]);
-
   // Global '/' hotkey to focus textarea
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (
         e.key === '/' &&
         !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)
@@ -159,25 +144,33 @@ export const CommandBar: React.FC<CommandBarProps> = ({
         textareaRef.current?.focus();
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
+      e.stopPropagation();
       handleSubmit();
     }
   };
 
-  const handleSubmit = (overrideText?: string) => {
+  const handleSubmit = (overrideText?: string, forceExecute = false) => {
     const textToSubmit = (overrideText ?? input).trim();
     if (!textToSubmit) return;
 
     const parsed = parseVoiceCommand(textToSubmit, hackathons);
-    onExecuteCommand(parsed, textToSubmit);
-    setInput('');
-    setActivePreview(null);
+
+    // "Ctrl plus Enter and Cmd plus Enter should run the command straight away when confidence is high.
+    // Only show the preview and wait when confidence is low."
+    if (parsed.confidence === 'high' || forceExecute) {
+      onExecuteCommand(parsed, textToSubmit);
+      setInput('');
+      setActivePreview(null);
+    } else {
+      setActivePreview(parsed);
+    }
 
     // Stop browser mic if recording
     if (isListening && recognitionRef.current) {
@@ -340,7 +333,7 @@ export const CommandBar: React.FC<CommandBarProps> = ({
               </button>
 
               <button
-                onClick={() => handleSubmit()}
+                onClick={() => handleSubmit(activePreview.rawText, true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-zinc-950 bg-cyan-400 hover:bg-cyan-300 rounded-lg shadow-md shadow-cyan-400/20 transition active:scale-95"
               >
                 <span>Confirm & Apply</span>

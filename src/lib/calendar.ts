@@ -1,5 +1,5 @@
 import { Hackathon } from '../types/index';
-import { formatIST } from './time';
+import { formatIST, getISTDateStamp } from './time';
 
 /**
  * Formats a Date object to iCalendar UTC timestamp: YYYYMMDDTHHMMSSZ
@@ -103,7 +103,7 @@ export function downloadCalendarIcs(hackathons: Hackathon[]): void {
 
   const link = document.createElement('a');
   link.href = url;
-  link.setAttribute('download', `hackboard-deadlines-${new Date().toISOString().split('T')[0]}.ics`);
+  link.setAttribute('download', `hackboard-deadlines-${getISTDateStamp()}.ics`);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

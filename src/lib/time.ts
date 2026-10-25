@@ -61,6 +61,53 @@ export function formatISTShort(dateInput: string | Date | number): string {
 }
 
 /**
+ * Returns YYYY-MM-DD formatted strictly in Indian Standard Time (IST)
+ */
+export function getISTDateStamp(dateInput: Date | string | number = new Date()): string {
+  const date = typeof dateInput === 'string' || typeof dateInput === 'number' ? new Date(dateInput) : dateInput;
+  const parts = new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+
+  const year = parts.find((p) => p.type === 'year')?.value || '2026';
+  const month = parts.find((p) => p.type === 'month')?.value || '10';
+  const day = parts.find((p) => p.type === 'day')?.value || '26';
+
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Formats a Date object or ISO string to Gantt format strictly in Indian Standard Time (IST):
+ * YYYY-MM-DD-HH:mm
+ */
+export function formatISTGantt(dateInput: Date | string | number): string {
+  const date = typeof dateInput === 'string' || typeof dateInput === 'number' ? new Date(dateInput) : dateInput;
+  if (isNaN(date.getTime())) return '2026-10-26-00:00';
+
+  const parts = new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+
+  const year = parts.find((p) => p.type === 'year')?.value || '2026';
+  const month = parts.find((p) => p.type === 'month')?.value || '10';
+  const day = parts.find((p) => p.type === 'day')?.value || '26';
+  let hour = parts.find((p) => p.type === 'hour')?.value || '00';
+  if (hour === '24') hour = '00';
+  const minute = parts.find((p) => p.type === 'minute')?.value || '00';
+
+  return `${year}-${month}-${day}-${hour}:${minute}`;
+}
+
+/**
  * Calculates live countdown from current moment to target deadline
  */
 export function getCountdown(deadlineInput: string | Date | number, now: Date = new Date()): Countdown {

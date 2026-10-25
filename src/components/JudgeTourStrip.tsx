@@ -8,6 +8,8 @@ interface JudgeTourStripProps {
   onOpenStep2WhatNow: () => void;
   onOpenStep3RulesReader: () => void;
   onSwitchStep4Timeline: () => void;
+  onStartTour?: () => void;
+  onEndTour?: () => void;
 }
 
 const STORAGE_KEY = 'hackboard_tour_dismissed_v1';
@@ -17,6 +19,8 @@ export const JudgeTourStrip: React.FC<JudgeTourStripProps> = ({
   onOpenStep2WhatNow,
   onOpenStep3RulesReader,
   onSwitchStep4Timeline,
+  onStartTour,
+  onEndTour,
 }) => {
   const [isDismissed, setIsDismissed] = useState(true);
   const [activeStep, setActiveStep] = useState<number | null>(null);
@@ -31,6 +35,9 @@ export const JudgeTourStrip: React.FC<JudgeTourStripProps> = ({
   }, []);
 
   const handleDismiss = () => {
+    if (activeStep !== null) {
+      onEndTour?.();
+    }
     setIsDismissed(true);
     setActiveStep(null);
     if (typeof window !== 'undefined') {
@@ -39,6 +46,7 @@ export const JudgeTourStrip: React.FC<JudgeTourStripProps> = ({
   };
 
   const handleStartTour = () => {
+    onStartTour?.();
     setActiveStep(1);
     // Step 1: Run sample ramble
     onRunStep1Command('Nvidia closes October 30 at 11:59 pm. I still need the demo video, readme, and deploy.');
@@ -56,6 +64,7 @@ export const JudgeTourStrip: React.FC<JudgeTourStripProps> = ({
       onSwitchStep4Timeline();
     } else if (activeStep === 4) {
       setActiveStep(null);
+      onEndTour?.();
     }
   };
 

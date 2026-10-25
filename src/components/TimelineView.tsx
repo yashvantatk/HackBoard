@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Hackathon } from '../types/index';
-import { formatISTShort, getCountdown } from '../lib/time';
+import { formatISTShort, formatISTGantt, getCountdown } from '../lib/time';
 import { Calendar, Clock, CheckCircle2, Play } from 'lucide-react';
 import mermaid from 'mermaid';
 
@@ -33,13 +33,16 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
         tertiaryColor: '#27272a',
       },
       gantt: {
-        axisFormat: '%b %d',
-        barHeight: 24,
-        barGap: 6,
-        topPadding: 35,
-        leftPadding: 120,
+        useMaxWidth: false,
+        axisFormat: '%a %d',
+        tickInterval: '1day',
+        barHeight: 28,
+        barGap: 8,
+        topPadding: 45,
+        leftPadding: 140,
         gridLineStartPadding: 35,
-        fontSize: 11,
+        fontSize: 12,
+        sectionFontSize: 13,
       },
     });
   }, []);
@@ -51,11 +54,6 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
       return;
     }
 
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const formatGanttDate = (d: Date) => {
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    };
-
     const now = new Date();
     const cleanStr = (s: string) => s.replace(/[:;,"'#]/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -63,7 +61,8 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
       'gantt',
       '    title Hackboard War Room Operations Timeline',
       '    dateFormat YYYY-MM-DD-HH:mm',
-      '    axisFormat %b %d',
+      '    axisFormat %a %d',
+      '    tickInterval 1day',
       '    todayMarker stroke-width:2px,stroke:#06b6d4,opacity:0.9',
     ];
 
@@ -79,7 +78,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
       if (tasks.length === 0) {
         // Fallback bar for hackathon without tasks
         const start = new Date(deadlineDate.getTime() - 24 * 60 * 60 * 1000);
-        lines.push(`    Deadline Milestone :crit, active, task_${taskIndex++}, ${formatGanttDate(start)}, ${formatGanttDate(deadlineDate)}`);
+        lines.push(`    Deadline Milestone :crit, active, task_${taskIndex++}, ${formatISTGantt(start)}, ${formatISTGantt(deadlineDate)}`);
         continue;
       }
 
@@ -87,7 +86,9 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
       let cumulativeHours = 0;
       for (let i = 0; i < tasks.length; i++) {
         const task = tasks[i];
-        const tTitle = cleanStr(task.title);
+        const rawTitle = cleanStr(task.title);
+        // Cut long task names with an ellipsis to keep Mermaid chart readable
+        const tTitle = rawTitle.length > 28 ? rawTitle.substring(0, 25) + '...' : rawTitle;
         const estHours = task.estimateHours && task.estimateHours > 0 ? task.estimateHours : 1;
 
         // Calculate a realistic time window
@@ -116,7 +117,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
         const modifier = task.status === 'done' ? 'done' : task.status === 'doing' ? 'active' : 'crit';
 
         lines.push(
-          `    ${tTitle} :${modifier}, ${id}, ${formatGanttDate(taskStart)}, ${formatGanttDate(taskEnd)}`
+          `    ${tTitle} :${modifier}, ${id}, ${formatISTGantt(taskStart)}, ${formatISTGantt(taskEnd)}`
         );
       }
     }
@@ -171,11 +172,11 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
       </div>
 
       {/* Mermaid Rendered Gantt Chart Container */}
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4 sm:p-6 overflow-x-auto shadow-xl no-scrollbar">
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4 sm:p-6 overflow-x-auto shadow-xl no-scrollbar min-h-[460px] flex flex-col justify-center">
         {!renderError && svgContent ? (
           <div
             ref={containerRef}
-            className="mermaid-wrapper min-w-[650px] flex items-center justify-center [&_svg]:max-w-full [&_svg]:h-auto"
+            className="mermaid-wrapper w-full min-w-full flex items-center justify-center min-h-[400px] [&_svg]:w-full [&_svg]:min-w-[650px] [&_svg]:h-auto [&_svg]:min-h-[380px]"
             dangerouslySetInnerHTML={{ __html: svgContent }}
           />
         ) : (
@@ -204,13 +205,13 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
                             : 'bg-zinc-900 border-zinc-800 text-zinc-200'
                         }`}
                       >
-                        <div className="flex items-center gap-2">
-                          {t.status === 'done' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
-                          {t.status === 'doing' && <Play className="w-3.5 h-3.5 text-cyan-400 fill-current" />}
-                          {t.status === 'todo' && <Clock className="w-3.5 h-3.5 text-zinc-500" />}
-                          <span>{t.title}</span>
+                        <div className="flex items-center gap-2 min-w-0">
+                          {t.status === 'done' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />}
+                          {t.status === 'doing' && <Play className="w-3.5 h-3.5 text-cyan-400 fill-current flex-shrink-0" />}
+                          {t.status === 'todo' && <Clock className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />}
+                          <span className="truncate max-w-[280px] sm:max-w-[480px]" title={t.title}>{t.title}</span>
                         </div>
-                        <span className="text-[10px] text-zinc-400">{t.estimateHours || 1}h</span>
+                        <span className="text-[10px] text-zinc-400 flex-shrink-0">{t.estimateHours || 1}h</span>
                       </div>
                     ))}
                   </div>
