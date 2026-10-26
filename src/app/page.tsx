@@ -32,6 +32,7 @@ import { SharedBoardBanner } from '../components/SharedBoardBanner';
 import { StartFreshBanner } from '../components/StartFreshBanner';
 import { PastHackathonsDrawer } from '../components/PastHackathonsDrawer';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { ShareLinkDialog } from '../components/ShareLinkDialog';
 import { downloadCalendarIcs } from '../lib/calendar';
 import { copyShareLink, clearSharedHash, parseShareHash } from '../lib/share';
 import { triggerCompletionConfetti, triggerMegaConfetti } from '../lib/confetti';
@@ -48,6 +49,7 @@ export default function HackboardPage() {
   const [isRulesReaderOpen, setIsRulesReaderOpen] = useState(false);
   const [isSharedView, setIsSharedView] = useState(false);
   const [isCopiedShare, setIsCopiedShare] = useState(false);
+  const [shareFallbackUrl, setShareFallbackUrl] = useState<string | null>(null);
   const [whatNowAvailableHours, setWhatNowAvailableHours] = useState<number | undefined>();
   const [commandBarPrompt, setCommandBarPrompt] = useState<string>('');
   const [isMounted, setIsMounted] = useState(false);
@@ -223,10 +225,14 @@ export default function HackboardPage() {
   // Share Board
   const handleShareBoard = async () => {
     if (isSharedView) return;
-    await copyShareLink(hackathons);
-    setIsCopiedShare(true);
-    setTimeout(() => setIsCopiedShare(false), 2500);
-    showNotification('Zero-server share link copied to clipboard!', 'info');
+    const res = await copyShareLink(hackathons);
+    if (res.success) {
+      setIsCopiedShare(true);
+      setTimeout(() => setIsCopiedShare(false), 2500);
+      showNotification('Share link copied', 'info');
+    } else if (res.url) {
+      setShareFallbackUrl(res.url);
+    }
   };
 
   // Import Shared Board to Local Storage (merging without duplicates)
@@ -931,6 +937,16 @@ export default function HackboardPage() {
         icon={confirmModalConfig?.icon}
         onConfirm={() => confirmModalConfig?.onConfirm()}
         onCancel={() => setConfirmModalConfig(null)}
+      />
+
+      {/* Fallback Share Dialog (when clipboard is unavailable) */}
+      <ShareLinkDialog
+        isOpen={Boolean(shareFallbackUrl)}
+        shareUrl={shareFallbackUrl || ''}
+        onClose={() => setShareFallbackUrl(null)}
+        onCopied={() => {
+          showNotification('Share link copied', 'info');
+        }}
       />
     </div>
   );

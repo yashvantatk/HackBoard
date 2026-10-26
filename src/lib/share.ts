@@ -123,32 +123,36 @@ export function parseShareHash(hashInput?: string): ShareHashParseResult {
 }
 
 /**
- * Copies the shared board URL to the clipboard and updates the current URL hash,
- * dispatching a hashchange event so open tabs immediately enter preview mode.
+ * Builds the full shareable URL containing the compressed board data in the hash.
  */
-export async function copyShareLink(hackathons: Hackathon[]): Promise<string> {
+export function buildShareUrl(hackathons: Hackathon[]): string {
   if (typeof window === 'undefined') return '';
-
   const encoded = encodeBoardToHash(hackathons);
-  const shareUrl = `${window.location.origin}${window.location.pathname}#${HASH_PREFIX}${encoded}`;
+  return `${window.location.origin}${window.location.pathname}#${HASH_PREFIX}${encoded}`;
+}
+
+/**
+ * Copies the shared board URL to the clipboard.
+ * Never modifies window.location, window.history, or the hash, and never dispatches hashchange.
+ */
+export async function copyShareLink(
+  hackathons: Hackathon[]
+): Promise<{ success: boolean; url: string }> {
+  if (typeof window === 'undefined') return { success: false, url: '' };
+
+  const shareUrl = buildShareUrl(hackathons);
+  if (!shareUrl) return { success: false, url: '' };
 
   try {
-    await navigator.clipboard.writeText(shareUrl);
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(shareUrl);
+      return { success: true, url: shareUrl };
+    }
   } catch (err) {
-    console.warn('Clipboard write failed, falling back:', err);
+    console.warn('Clipboard writeText failed, falling back to dialog:', err);
   }
 
-  // Update URL hash
-  window.history.replaceState(null, '', shareUrl);
-
-  // Dispatch hashchange event so any open tab enters preview mode immediately
-  try {
-    window.dispatchEvent(new HashChangeEvent('hashchange'));
-  } catch {
-    window.dispatchEvent(new Event('hashchange'));
-  }
-
-  return shareUrl;
+  return { success: false, url: shareUrl };
 }
 
 /**
@@ -160,17 +164,10 @@ export function decodeBoardFromHash(hashInput?: string): Hackathon[] | null {
 }
 
 /**
- * Removes the share hash from the current URL using history.replaceState
- * and dispatches a hashchange event.
+ * Removes the share hash from the current URL using history.replaceState.
  */
 export function clearSharedHash(): void {
   if (typeof window === 'undefined') return;
   const cleanUrl = window.location.pathname + (window.location.search || '');
   window.history.replaceState(null, '', cleanUrl);
-
-  try {
-    window.dispatchEvent(new HashChangeEvent('hashchange'));
-  } catch {
-    window.dispatchEvent(new Event('hashchange'));
-  }
 }

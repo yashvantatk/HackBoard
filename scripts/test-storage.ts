@@ -36,6 +36,19 @@ class MockLocalStorage {
 const mockStorage = new MockLocalStorage();
 
 (globalThis as any).localStorage = mockStorage;
+try {
+  Object.defineProperty(globalThis.navigator, 'clipboard', {
+    value: {
+      writeText: async (text: string) => {
+        (globalThis as any).__lastCopiedText = text;
+      },
+    },
+    configurable: true,
+    writable: true,
+  });
+} catch {
+  // If navigator is not defined or cannot define property
+}
 (globalThis as any).window = {
   location: {
     origin: 'https://hackerboard.vercel.app',
@@ -65,7 +78,7 @@ import {
   mergeHackathons,
   isTaskAlreadyInHackathon,
 } from '../src/lib/storage';
-import { encodeBoardToHash, decodeBoardFromHash, parseShareHash } from '../src/lib/share';
+import { encodeBoardToHash, decodeBoardFromHash, parseShareHash, copyShareLink } from '../src/lib/share';
 import { Hackathon } from '../src/types/index';
 
 let totalTests = 0;
@@ -82,9 +95,10 @@ function assert(condition: boolean, testName: string, detail?: string) {
   }
 }
 
-console.log('======================================================================');
-console.log('HACKBOARD STORAGE & DATA SAFETY VERIFICATION SUITE');
-console.log('======================================================================\n');
+async function runTests() {
+  console.log('======================================================================');
+  console.log('HACKBOARD STORAGE & DATA SAFETY VERIFICATION SUITE');
+  console.log('======================================================================\n');
 
 // ---------------------------------------------------------------------------
 // TEST GROUP 1: First Visit Seeding & No Reseeding After Board is Cleared
@@ -254,6 +268,23 @@ const userPrivateBoard: Hackathon[] = [
 saveHackathons(userPrivateBoard);
 const userStorageBeforeShare = mockStorage.getItem(STORAGE_KEY_V1);
 
+// Test: Copying a share link leaves the current hash and storage untouched
+(globalThis as any).window.location.hash = '';
+const copyResult = await copyShareLink(userPrivateBoard);
+assert(copyResult.success === true, 'copyShareLink returned success: true');
+assert(
+  copyResult.url.includes('#shared='),
+  'copyShareLink generated valid share URL with #shared='
+);
+assert(
+  (globalThis as any).window.location.hash === '',
+  'Copying a share link leaves current hash untouched (never changes window.location or hash)'
+);
+assert(
+  mockStorage.getItem(STORAGE_KEY_V1) === userStorageBeforeShare,
+  'Copying a share link leaves storage untouched (never touches localStorage)'
+);
+
 // Incoming shared board from friend
 const friendSharedBoard: Hackathon[] = [
   {
@@ -391,10 +422,16 @@ assert(
 const stillHasUserHack = boardWithSample.some((h) => h.id === 'hack-user-smart-india');
 assert(stillHasUserHack, 'User hackathon was preserved without being wiped');
 
-console.log('\n======================================================================');
-console.log(`STORAGE TEST SUITE RESULTS: ${passedTests} PASSED / ${totalTests} TOTAL`);
-console.log('======================================================================');
+  console.log('\n======================================================================');
+  console.log(`STORAGE TEST SUITE RESULTS: ${passedTests} PASSED / ${totalTests} TOTAL`);
+  console.log('======================================================================');
 
-if (passedTests !== totalTests) {
-  process.exit(1);
+  if (passedTests !== totalTests) {
+    process.exit(1);
+  }
 }
+
+runTests().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
