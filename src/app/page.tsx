@@ -137,9 +137,13 @@ export default function HackboardPage() {
   // Global keyboard shortcuts: K (toggle view), T (timeline), N (What now), R (Rules reader), ? (Shortcuts)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
       if (
-        e.target instanceof HTMLInputElement || 
-        e.target instanceof HTMLTextAreaElement
+        target instanceof HTMLInputElement || 
+        target instanceof HTMLTextAreaElement ||
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable
       ) {
         return;
       }

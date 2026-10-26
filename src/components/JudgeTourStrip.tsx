@@ -163,7 +163,7 @@ export const JudgeTourStrip: React.FC<JudgeTourStripProps> = ({
             <>
               <Calendar className="w-4 h-4 text-cyan-400 shrink-0" />
               <span>
-                <strong>Step 4:</strong> Switched to <em>Timeline View</em> — entire hackathon week plotted live with Mermaid Gantt.
+                <strong>Step 4:</strong> Switched to <em>Timeline View</em> — entire hackathon week plotted live with real-time countdowns and tasks.
               </span>
             </>
           )}

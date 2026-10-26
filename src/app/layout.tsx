@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Hackboard — Voice-First War Room for Multi-Hackathon Sprinters",
-  description: "Hold your Wispr key and ramble. Hackboard extracts hackathons, deadlines in IST, live countdowns, task estimates, Kanban, and Mermaid Gantt timeline. 100% local-first with zero API keys.",
-  keywords: ["hackathon", "war room", "wispr flow", "voice-first", "kanban", "mermaid gantt", "deadlines", "nextjs", "local-first"],
+  description: "Hold your Wispr key and ramble. Hackboard extracts hackathons, deadlines in IST, live countdowns, task estimates, Kanban, and Operations timeline. 100% local-first with zero API keys.",
+  keywords: ["hackathon", "war room", "wispr flow", "voice-first", "kanban", "timeline", "deadlines", "nextjs", "local-first"],
   authors: [{ name: "Hackboard Team" }],
   icons: {
     icon: "/favicon.svg",

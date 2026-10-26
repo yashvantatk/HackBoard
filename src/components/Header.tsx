@@ -152,7 +152,7 @@ export const Header: React.FC<HeaderProps> = ({
                     ? 'bg-indigo-500 text-white font-bold shadow-sm'
                     : 'text-zinc-400 hover:text-zinc-200'
                 }`}
-                title="Mermaid Gantt Timeline (Shortcut: T)"
+                title="Operations Timeline (Shortcut: T)"
               >
                 <CalendarIcon className="w-3.5 h-3.5" />
                 <span>Timeline</span>

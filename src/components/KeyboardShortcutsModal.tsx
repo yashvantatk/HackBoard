@@ -14,11 +14,16 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
 }) => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isTyping =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable;
+
       // Toggle modal with ? if not typing in input or textarea
-      if (
-        e.key === '?' &&
-        !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)
-      ) {
+      if (e.key === '?' && !isTyping) {
         e.preventDefault();
         if (isOpen) {
           onClose();
@@ -53,7 +58,7 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
     },
     {
       keys: ['T'],
-      description: 'Switch to Mermaid Gantt Timeline operations view',
+      description: 'Switch to Operations Timeline view',
       badge: 'View',
     },
     {

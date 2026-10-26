@@ -133,26 +133,16 @@ export const CommandBar: React.FC<CommandBarProps> = ({
     }
   }, []);
 
-  const isSubmittingRef = useRef(false);
-  const handleSubmitRef = useRef<(overrideText?: string, forceExecute?: boolean) => void>(() => {});
-
-  const handleSubmit = (overrideText?: string, forceExecute = false) => {
-    if (isSubmittingRef.current && !forceExecute) return;
-    isSubmittingRef.current = true;
-    setTimeout(() => {
-      isSubmittingRef.current = false;
-    }, 120);
-
-    const rawText = overrideText !== undefined
-      ? overrideText
+  const runCommand = (textFromRef?: string, forceExecute = false) => {
+    const rawText = textFromRef !== undefined
+      ? textFromRef
       : (textareaRef.current?.value ?? input);
     const textToSubmit = rawText.trim();
     if (!textToSubmit) return;
 
     const parsed = parseVoiceCommand(textToSubmit, hackathons);
 
-    // "Ctrl plus Enter and Cmd plus Enter should run the command straight away when confidence is high.
-    // Only show the preview and wait when confidence is low."
+    // Run command straight away when confidence is high or forced
     if (parsed.confidence === 'high' || forceExecute) {
       onExecuteCommand(parsed, textToSubmit);
       setInput('');
@@ -171,39 +161,26 @@ export const CommandBar: React.FC<CommandBarProps> = ({
     }
   };
 
-  handleSubmitRef.current = handleSubmit;
-
-  // Global '/' hotkey to focus textarea, and fallback listener for Ctrl+Enter
+  // Global '/' hotkey to focus textarea (ignored when typing in inputs/textareas)
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const target = e.target;
       if (
-        e.key === '/' &&
-        !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target as HTMLElement)?.isContentEditable
       ) {
+        return;
+      }
+
+      if (e.key === '/') {
         e.preventDefault();
         textareaRef.current?.focus();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-        const target = e.target;
-        if (target === textareaRef.current || target instanceof HTMLTextAreaElement) {
-          e.preventDefault();
-          const latestValue = textareaRef.current?.value || (target as HTMLTextAreaElement).value || '';
-          handleSubmitRef.current(latestValue);
-        }
       }
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-      e.preventDefault();
-      e.stopPropagation();
-      // Always read latest value directly from textarea to eliminate stale state
-      const latestText = e.currentTarget.value || textareaRef.current?.value || input;
-      handleSubmit(latestText);
-    }
-  };
 
   const toggleBrowserDictation = () => {
     if (!recognitionRef.current) return;
@@ -264,7 +241,12 @@ export const CommandBar: React.FC<CommandBarProps> = ({
               rows={2}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  runCommand(textareaRef.current?.value);
+                }
+              }}
               placeholder="What's on my plate? Hold your Wispr key and talk."
               className="w-full resize-none bg-transparent text-sm sm:text-base font-normal text-zinc-100 placeholder-zinc-500 focus:outline-none leading-relaxed transition-all min-h-[56px]"
             />
@@ -286,9 +268,16 @@ export const CommandBar: React.FC<CommandBarProps> = ({
                 </button>
               )}
 
+              {/* Small hint next to Execute */}
+              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-mono text-zinc-400 px-1.5 py-1">
+                <kbd className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px]">Ctrl</kbd>
+                <span>+</span>
+                <kbd className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px]">Enter</kbd>
+              </span>
+
               <button
                 type="button"
-                onClick={() => handleSubmit()}
+                onClick={() => runCommand(textareaRef.current?.value)}
                 disabled={!input.trim()}
                 className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl font-medium text-xs sm:text-sm transition-all duration-200 ${
                   input.trim()
@@ -359,7 +348,7 @@ export const CommandBar: React.FC<CommandBarProps> = ({
               </button>
 
               <button
-                onClick={() => handleSubmit(activePreview.rawText, true)}
+                onClick={() => runCommand(activePreview.rawText, true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-zinc-950 bg-cyan-400 hover:bg-cyan-300 rounded-lg shadow-md shadow-cyan-400/20 transition active:scale-95"
               >
                 <span>Confirm & Apply</span>

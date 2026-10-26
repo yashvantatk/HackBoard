@@ -1,242 +1,382 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Hackathon } from '../types/index';
-import { formatISTShort, formatISTGantt, getCountdown } from '../lib/time';
-import { Calendar, Clock, CheckCircle2, Play } from 'lucide-react';
-import mermaid from 'mermaid';
+import { getCountdown, Countdown, formatISTShort } from '../lib/time';
+import { Calendar, Clock, CheckCircle2, Play, Eye, EyeOff } from 'lucide-react';
 
 interface TimelineViewProps {
   hackathons: Hackathon[];
 }
 
 export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [svgContent, setSvgContent] = useState<string>('');
-  const [renderError, setRenderError] = useState<string | null>(null);
-  const [renderKey, setRenderKey] = useState(0);
+  const [now, setNow] = useState<Date>(() => new Date());
+  const [showDone, setShowDone] = useState<boolean>(false);
 
-  // Re-render when window resizes
+  // Live timer tick every 10 seconds to update 'Now' marker and countdowns
   useEffect(() => {
-    let timer: NodeJS.Timeout;
-    const handleResize = () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        setRenderKey((k) => k + 1);
-      }, 150);
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      clearTimeout(timer);
-    };
+    const timer = setInterval(() => {
+      setNow(new Date());
+    }, 10000);
+    return () => clearInterval(timer);
   }, []);
 
-  // Initialize mermaid with larger font sizes, taller bar height, and useMaxWidth: false
-  useEffect(() => {
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: 'dark',
-      securityLevel: 'loose',
-      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-      themeVariables: {
-        darkMode: true,
-        background: '#09090b',
-        primaryColor: '#06b6d4',
-        primaryTextColor: '#f4f4f5',
-        primaryBorderColor: '#0891b2',
-        lineColor: '#52525b',
-        secondaryColor: '#10b981',
-        tertiaryColor: '#27272a',
-      },
-      gantt: {
-        useMaxWidth: false,
-        axisFormat: '%a %d',
-        tickInterval: '1day',
-        barHeight: 36,
-        barGap: 10,
-        topPadding: 50,
-        leftPadding: 180,
-        gridLineStartPadding: 40,
-        fontSize: 14,
-        sectionFontSize: 16,
-        numberSectionStyles: 4,
-      },
+  // Compute timeline span: from start of today (IST) until end of latest deadline day (IST)
+  const timeline = useMemo(() => {
+    if (hackathons.length === 0) return null;
+
+    const istFormatter = new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
     });
-  }, []);
 
-  // Generate Mermaid Gantt Chart syntax and render SVG
-  useEffect(() => {
-    if (hackathons.length === 0) {
-      setSvgContent('');
-      return;
+    const nowParts = istFormatter.formatToParts(now);
+    const nowYear = parseInt(nowParts.find((p) => p.type === 'year')?.value || `${now.getFullYear()}`);
+    const nowMonth = parseInt(nowParts.find((p) => p.type === 'month')?.value || `${now.getMonth() + 1}`);
+    const nowDay = parseInt(nowParts.find((p) => p.type === 'day')?.value || `${now.getDate()}`);
+
+    const pad = (n: number) => String(n).padStart(2, '0');
+    // Start of today in IST (00:00:00+05:30)
+    const startDate = new Date(`${nowYear}-${pad(nowMonth)}-${pad(nowDay)}T00:00:00+05:30`);
+
+    // Latest deadline among hackathons
+    const maxDeadlineMs = Math.max(
+      ...hackathons.map((h) => new Date(h.deadline).getTime()),
+      startDate.getTime() + 3 * 24 * 60 * 60 * 1000 // At least 3 full days
+    );
+    const maxDeadlineDate = new Date(maxDeadlineMs);
+
+    const maxParts = istFormatter.formatToParts(maxDeadlineDate);
+    const maxYear = parseInt(maxParts.find((p) => p.type === 'year')?.value || `${maxDeadlineDate.getFullYear()}`);
+    const maxMonth = parseInt(maxParts.find((p) => p.type === 'month')?.value || `${maxDeadlineDate.getMonth() + 1}`);
+    const maxDay = parseInt(maxParts.find((p) => p.type === 'day')?.value || `${maxDeadlineDate.getDate()}`);
+
+    // End of last deadline day in IST (23:59:59+05:30)
+    const endDate = new Date(`${maxYear}-${pad(maxMonth)}-${pad(maxDay)}T23:59:59+05:30`);
+
+    // Generate day columns
+    const days: { label: string; date: Date }[] = [];
+    let cur = new Date(startDate.getTime());
+    while (cur.getTime() <= endDate.getTime() + 1000) {
+      const label = new Intl.DateTimeFormat('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        weekday: 'short',
+        day: 'numeric',
+      }).format(cur);
+      days.push({ label, date: new Date(cur.getTime()) });
+      cur = new Date(cur.getTime() + 24 * 60 * 60 * 1000);
     }
 
-    const now = new Date();
-    const cleanStr = (s: string) => s.replace(/[:;,"'#]/g, ' ').replace(/\s+/g, ' ').trim();
+    const totalStartMs = startDate.getTime();
+    const totalEndMs = endDate.getTime();
+    const totalDurationMs = Math.max(1, totalEndMs - totalStartMs);
 
-    const lines: string[] = [
-      'gantt',
-      '    title Hackboard War Room Operations Timeline',
-      '    dateFormat YYYY-MM-DD-HH:mm',
-      '    axisFormat %a %d',
-      '    tickInterval 1day',
-      '    todayMarker stroke-width:3px,stroke:#06b6d4,opacity:0.95',
-    ];
-
-    let taskIndex = 0;
-
-    for (const h of hackathons) {
-      const hName = cleanStr(h.name);
-      lines.push(`    section ${hName}`);
-
-      const deadlineDate = new Date(h.deadline);
-      const tasks = h.tasks || [];
-
-      if (tasks.length === 0) {
-        // Fallback milestone starting at current time ending at deadline
-        lines.push(`    Deadline Milestone :crit, active, task_${taskIndex++}, ${formatISTGantt(now)}, ${formatISTGantt(deadlineDate)}`);
-        continue;
-      }
-
-      // Schedule tasks starting at the current time so bars spread horizontally across the container
-      let cumulativeHours = 0;
-      for (let i = 0; i < tasks.length; i++) {
-        const task = tasks[i];
-        const rawTitle = cleanStr(task.title);
-        // Truncate long task names with ellipsis for crisp readability
-        const tTitle = rawTitle.length > 26 ? rawTitle.substring(0, 23) + '...' : rawTitle;
-        const estHours = task.estimateHours && task.estimateHours > 0 ? task.estimateHours : 1;
-
-        // Start from current time (now) so the chart spans from now to deadline
-        const taskStart = new Date(now.getTime() + cumulativeHours * 60 * 60 * 1000);
-        cumulativeHours += estHours;
-        let taskEnd = new Date(now.getTime() + cumulativeHours * 60 * 60 * 1000);
-
-        if (taskEnd.getTime() > deadlineDate.getTime()) {
-          taskEnd = deadlineDate;
-        }
-        if (taskEnd.getTime() <= taskStart.getTime()) {
-          taskEnd = new Date(taskStart.getTime() + 30 * 60 * 1000);
-        }
-
-        const id = `t_${taskIndex++}`;
-        const modifier = task.status === 'done' ? 'done' : task.status === 'doing' ? 'active' : 'crit';
-
-        lines.push(
-          `    ${tTitle} :${modifier}, ${id}, ${formatISTGantt(taskStart)}, ${formatISTGantt(taskEnd)}`
-        );
-      }
-    }
-
-    const diagramDefinition = lines.join('\n');
-
-    const renderChart = async () => {
-      try {
-        const uniqueId = `mermaid-gantt-${Date.now()}`;
-        const { svg } = await mermaid.render(uniqueId, diagramDefinition);
-        
-        // Ensure SVG scales to 100% of container width and remove restrictive inline max-width
-        const fluidSvg = svg
-          .replace(/max-width:\s*[^;"]+;?/gi, '')
-          .replace(/<svg\s+([^>]*?)style="([^"]*?)"/gi, (match, prefix, style) => {
-            const cleanStyle = style.replace(/max-width:\s*[^;]+;?/gi, '').trim();
-            return `<svg ${prefix} style="${cleanStyle}; width: 100%; min-width: 100%; display: block;"`;
-          });
-
-        setSvgContent(fluidSvg);
-        setRenderError(null);
-      } catch (err: unknown) {
-        console.warn('Mermaid rendering issue, using visual fallback:', err);
-        setRenderError('Mermaid rendering issue');
-      }
+    const getPct = (timestampMs: number): number => {
+      const clamped = Math.max(totalStartMs, Math.min(totalEndMs, timestampMs));
+      return ((clamped - totalStartMs) / totalDurationMs) * 100;
     };
 
-    renderChart();
-  }, [hackathons, renderKey]);
+    const nowPct = getPct(now.getTime());
 
-  if (hackathons.length === 0) {
+    return {
+      days,
+      totalStartMs,
+      totalEndMs,
+      totalDurationMs,
+      getPct,
+      nowPct,
+    };
+  }, [hackathons, now]);
+
+  if (hackathons.length === 0 || !timeline) {
     return (
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-8 text-center text-zinc-400">
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-8 text-center text-zinc-400 font-mono text-sm">
         No active hackathons to plot on the timeline.
       </div>
     );
   }
 
+  const totalDoneTasks = hackathons.reduce(
+    (acc, h) => acc + h.tasks.filter((t) => t.status === 'done').length,
+    0
+  );
+
+  // Card-matching urgency color for the hackathon deadline bars
+  const getUrgencyClasses = (cd: Countdown) => {
+    if (cd.isExpired) {
+      return 'bg-zinc-800 border-zinc-700 text-zinc-400';
+    }
+    switch (cd.urgency) {
+      case 'critical': // <= 12 hours
+        return 'bg-gradient-to-r from-rose-600/90 to-rose-500/90 border-rose-400 text-white shadow-lg shadow-rose-950/50';
+      case 'warning': // <= 48 hours
+        return 'bg-gradient-to-r from-amber-600/90 to-amber-500/90 border-amber-400 text-white shadow-lg shadow-amber-950/50';
+      case 'normal': // > 48 hours
+      default:
+        return 'bg-gradient-to-r from-emerald-600/90 to-emerald-500/90 border-emerald-400 text-white shadow-lg shadow-emerald-950/50';
+    }
+  };
+
   return (
-    <div className="space-y-4">
-      {/* Header bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 text-xs">
+    <div className="w-full space-y-4">
+      {/* Top Controls Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 text-xs font-mono">
         <div className="flex items-center gap-2">
           <Calendar className="w-4 h-4 text-cyan-400" />
-          <span className="font-mono text-zinc-200">
-            <strong>Mermaid Gantt Timeline</strong> • All Hackathons &amp; Tasks this week
+          <span className="text-zinc-200">
+            <strong>Operations Timeline</strong> • {timeline.days.length} Days View (IST)
           </span>
         </div>
 
-        <div className="flex items-center gap-3 font-mono text-[11px] text-zinc-400">
-          <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" /> Done
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-sm bg-cyan-400 inline-block" /> Doing
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-sm bg-rose-500 inline-block" /> To-Do / Deadline
-          </span>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShowDone((prev) => !prev)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-950 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
+          >
+            {showDone ? (
+              <EyeOff className="w-3.5 h-3.5 text-zinc-400" />
+            ) : (
+              <Eye className="w-3.5 h-3.5 text-cyan-400" />
+            )}
+            <span>{showDone ? 'Hide Done' : `Show Done (${totalDoneTasks})`}</span>
+          </button>
+
+          <div className="hidden sm:flex items-center gap-3 text-[11px] text-zinc-400">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" /> &gt;48h
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm bg-amber-500 inline-block" /> &le;48h
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm bg-rose-500 inline-block" /> &le;12h
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* Mermaid Rendered Gantt Chart Container */}
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4 sm:p-6 overflow-x-auto shadow-xl no-scrollbar min-h-[460px] flex flex-col justify-center">
-        {!renderError && svgContent ? (
-          <div
-            ref={containerRef}
-            className="mermaid-wrapper w-full overflow-hidden [&_svg]:!w-full [&_svg]:!max-w-none [&_svg]:!h-auto [&_svg]:block"
-            dangerouslySetInnerHTML={{ __html: svgContent }}
-          />
-        ) : (
-          /* High-resilience Visual Gantt Bar Fallback */
-          <div className="space-y-6">
-            {hackathons.map((h) => {
-              const cd = getCountdown(h.deadline);
-              return (
-                <div key={h.id} className="space-y-2">
-                  <div className="flex items-center justify-between border-b border-zinc-800 pb-1.5">
-                    <h4 className="text-sm font-bold text-white font-mono">{h.name}</h4>
-                    <span className="text-xs font-mono text-cyan-400">
-                      Closes {formatISTShort(h.deadline)} ({cd.days}d {cd.hours}h left)
+      {/* Custom HTML + Tailwind Responsive Timeline */}
+      <div className="w-full rounded-2xl border border-zinc-800 bg-zinc-950/90 shadow-2xl overflow-hidden">
+        <div className="w-full overflow-x-auto no-scrollbar">
+          <div className="w-full min-w-[760px] flex flex-col divide-y divide-zinc-800/80">
+            
+            {/* Sticky Header Row */}
+            <div className="sticky top-0 z-40 flex items-stretch bg-zinc-900/95 backdrop-blur-md border-b border-zinc-800">
+              {/* Left Fixed 200px Column: Hackathons Label */}
+              <div className="w-[200px] min-w-[200px] max-w-[200px] shrink-0 sticky left-0 z-50 bg-zinc-900 px-4 py-3 border-r border-zinc-800 flex items-center justify-between text-[13px] font-mono font-bold text-zinc-300">
+                <span className="truncate" title="Hackathons & Tasks">Hackathons</span>
+                <span className="text-[10px] text-zinc-400 font-normal">Tasks</span>
+              </div>
+
+              {/* Day Columns */}
+              <div className="flex-1 relative flex items-stretch">
+                {timeline.days.map((day, idx) => (
+                  <div
+                    key={idx}
+                    className="flex-1 px-3 py-3 border-r border-zinc-800/60 last:border-r-0 flex items-center justify-center text-center"
+                  >
+                    <span className="text-[13px] font-mono font-semibold text-zinc-300 tracking-wide">
+                      {day.label}
                     </span>
                   </div>
+                ))}
 
-                  <div className="space-y-1.5 pl-2">
-                    {h.tasks.map((t) => (
+                {/* Now Marker Pill in Header */}
+                <div
+                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-30 pointer-events-none"
+                  style={{ left: `${timeline.nowPct}%` }}
+                >
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500 text-zinc-950 shadow-md shadow-cyan-950">
+                    Now
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Hackathon Sections and Tasks */}
+            {hackathons.map((h) => {
+              const cd = getCountdown(h.deadline, now);
+              const deadlineMs = new Date(h.deadline).getTime();
+              const deadlinePct = timeline.getPct(deadlineMs);
+
+              // Bar starts at Now and ends at deadline
+              const barLeft = Math.max(0, timeline.nowPct);
+              const barWidth = Math.max(2, deadlinePct - barLeft);
+
+              const cdText = cd.isExpired
+                ? 'Closed'
+                : `${cd.days > 0 ? `${cd.days}d ` : ''}${cd.hours}h ${cd.minutes}m left`;
+
+              const visibleTasks = showDone
+                ? h.tasks
+                : h.tasks.filter((t) => t.status !== 'done');
+
+              // Sequential placement for unfinished tasks starting at now
+              let cumulativeTaskHours = 0;
+
+              return (
+                <div key={h.id} className="flex flex-col bg-zinc-950/60 hover:bg-zinc-900/20 transition-colors">
+                  {/* Hackathon Parent Row */}
+                  <div className="flex items-stretch min-h-[50px] relative">
+                    {/* Fixed 200px Left Column: Hackathon Name */}
+                    <div className="w-[200px] min-w-[200px] max-w-[200px] shrink-0 sticky left-0 z-30 bg-zinc-950 px-4 py-2.5 border-r border-zinc-800 flex items-center justify-between gap-2 shadow-sm">
+                      <div className="min-w-0 flex items-center gap-2">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: h.accentColor || '#06b6d4' }}
+                        />
+                        <span
+                          className="text-xs font-mono font-bold text-white truncate"
+                          title={h.name}
+                        >
+                          {h.name}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono text-zinc-400 shrink-0">
+                        {h.tasks.filter((t) => t.status === 'done').length}/{h.tasks.length}
+                      </span>
+                    </div>
+
+                    {/* Hackathon Timeline Bar Area */}
+                    <div className="flex-1 relative flex items-center px-1">
+                      {/* Day Grid Lines */}
+                      <div className="absolute inset-0 flex pointer-events-none">
+                        {timeline.days.map((_, idx) => (
+                          <div
+                            key={idx}
+                            className="flex-1 border-r border-zinc-800/30 last:border-r-0"
+                          />
+                        ))}
+                      </div>
+
+                      {/* Thin Vertical Line for Right Now */}
+                      <div
+                        className="absolute top-0 bottom-0 w-[2px] bg-cyan-400 z-20 pointer-events-none shadow-[0_0_8px_rgba(6,182,212,0.9)]"
+                        style={{ left: `${timeline.nowPct}%` }}
+                      />
+
+                      {/* Colored Urgency Bar from Now until Deadline */}
+                      <div
+                        className={`absolute h-8 rounded-xl border flex items-center z-10 transition-all ${getUrgencyClasses(
+                          cd
+                        )}`}
+                        style={{
+                          left: `${barLeft}%`,
+                          width: `${barWidth}%`,
+                        }}
+                        title={`${h.name}: closes ${formatISTShort(h.deadline)} (${cdText})`}
+                      >
+                        <div className="px-3 flex items-center justify-between w-full min-w-0">
+                          <span className="text-[11px] font-mono font-bold truncate">
+                            {cdText}
+                          </span>
+                          <span className="hidden md:inline text-[10px] font-mono opacity-80 shrink-0 ml-1">
+                            Closes {formatISTShort(h.deadline)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Indented Task Sub-Rows */}
+                  {visibleTasks.map((t) => {
+                    const estHours = t.estimateHours && t.estimateHours > 0 ? t.estimateHours : 1;
+
+                    // Calculate task position starting from now
+                    const taskStartMs = now.getTime() + cumulativeTaskHours * 60 * 60 * 1000;
+                    cumulativeTaskHours += estHours;
+                    let taskEndMs = taskStartMs + estHours * 60 * 60 * 1000;
+                    if (taskEndMs > deadlineMs) taskEndMs = deadlineMs;
+
+                    const taskStartPct = timeline.getPct(taskStartMs);
+                    const taskEndPct = timeline.getPct(taskEndMs);
+                    const taskWidthPct = Math.max(1.5, taskEndPct - taskStartPct);
+
+                    return (
                       <div
                         key={t.id}
-                        className={`flex items-center justify-between p-2 rounded-lg border text-xs font-mono ${
-                          t.status === 'done'
-                            ? 'bg-zinc-900/40 border-zinc-800 text-zinc-500 line-through'
-                            : t.status === 'doing'
-                            ? 'bg-blue-950/30 border-blue-500/40 text-blue-200'
-                            : 'bg-zinc-900 border-zinc-800 text-zinc-200'
-                        }`}
+                        className="flex items-stretch min-h-[34px] border-t border-zinc-900 bg-zinc-950/40 hover:bg-zinc-900/40 transition-colors"
                       >
-                        <div className="flex items-center gap-2 min-w-0">
-                          {t.status === 'done' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />}
-                          {t.status === 'doing' && <Play className="w-3.5 h-3.5 text-cyan-400 fill-current flex-shrink-0" />}
-                          {t.status === 'todo' && <Clock className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />}
-                          <span className="truncate max-w-[280px] sm:max-w-[480px]" title={t.title}>{t.title}</span>
+                        {/* Fixed 200px Left Column: Indented Task Title & Estimate */}
+                        <div className="w-[200px] min-w-[200px] max-w-[200px] shrink-0 sticky left-0 z-30 bg-zinc-950 pl-6 pr-3 py-1.5 border-r border-zinc-800 flex items-center justify-between gap-1.5 shadow-sm">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {t.status === 'done' && (
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                            )}
+                            {t.status === 'doing' && (
+                              <Play className="w-3 h-3 text-cyan-400 fill-current shrink-0" />
+                            )}
+                            {t.status === 'todo' && (
+                              <Clock className="w-3 h-3 text-zinc-500 shrink-0" />
+                            )}
+                            <span
+                              className={`text-[11px] font-mono truncate ${
+                                t.status === 'done'
+                                  ? 'text-zinc-500 line-through'
+                                  : t.status === 'doing'
+                                  ? 'text-cyan-200 font-semibold'
+                                  : 'text-zinc-300'
+                              }`}
+                              title={t.title}
+                            >
+                              {t.title}
+                            </span>
+                          </div>
+
+                          <span className="text-[10px] font-mono text-zinc-400 bg-zinc-900/90 px-1 py-0.5 rounded border border-zinc-800 shrink-0">
+                            {estHours}h
+                          </span>
                         </div>
-                        <span className="text-[10px] text-zinc-400 flex-shrink-0">{t.estimateHours || 1}h</span>
+
+                        {/* Task Timeline Track */}
+                        <div className="flex-1 relative flex items-center px-1">
+                          {/* Day Grid Lines */}
+                          <div className="absolute inset-0 flex pointer-events-none">
+                            {timeline.days.map((_, idx) => (
+                              <div
+                                key={idx}
+                                className="flex-1 border-r border-zinc-800/30 last:border-r-0"
+                              />
+                            ))}
+                          </div>
+
+                          {/* Thin Vertical Line for Right Now */}
+                          <div
+                            className="absolute top-0 bottom-0 w-[2px] bg-cyan-400/80 z-20 pointer-events-none"
+                            style={{ left: `${timeline.nowPct}%` }}
+                          />
+
+                          {/* Task Mini-Bar */}
+                          <div
+                            className={`absolute h-5 rounded-md border flex items-center px-2 z-10 transition-all ${
+                              t.status === 'done'
+                                ? 'bg-zinc-900/60 border-zinc-800/80 text-zinc-500 line-through'
+                                : t.status === 'doing'
+                                ? 'bg-cyan-500/20 border-cyan-400/70 text-cyan-200 shadow-sm shadow-cyan-950'
+                                : 'bg-zinc-800/80 border-zinc-700/80 text-zinc-200'
+                            }`}
+                            style={{
+                              left: `${t.status === 'done' ? timeline.getPct(new Date(t.createdAt || now).getTime()) : taskStartPct}%`,
+                              width: `${taskWidthPct}%`,
+                            }}
+                            title={`${t.title} (${estHours}h) • Status: ${t.status}`}
+                          >
+                            <span className="text-[10px] font-mono truncate">
+                              {t.title}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
               );
             })}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
