@@ -242,7 +242,9 @@ export const CommandBar: React.FC<CommandBarProps> = ({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                if (e.key === 'Escape') {
+                  e.currentTarget.blur();
+                } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                   e.preventDefault();
                   runCommand(textareaRef.current?.value);
                 }

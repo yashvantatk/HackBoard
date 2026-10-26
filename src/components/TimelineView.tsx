@@ -21,7 +21,9 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
     return () => clearInterval(timer);
   }, []);
 
-  // Compute timeline span: from start of today (IST) until end of latest deadline day (IST)
+  // Compute exact timeline bounds strictly in Indian Standard Time (IST):
+  // Start: 00:00:00 IST of today
+  // End: 24:00:00 IST of the latest deadline day (ends exactly at the last deadline's day)
   const timeline = useMemo(() => {
     if (hackathons.length === 0) return null;
 
@@ -32,58 +34,64 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
       day: 'numeric',
     });
 
+    const pad = (n: number) => String(n).padStart(2, '0');
+
+    // Start of today in IST (00:00:00.000+05:30)
     const nowParts = istFormatter.formatToParts(now);
     const nowYear = parseInt(nowParts.find((p) => p.type === 'year')?.value || `${now.getFullYear()}`);
     const nowMonth = parseInt(nowParts.find((p) => p.type === 'month')?.value || `${now.getMonth() + 1}`);
     const nowDay = parseInt(nowParts.find((p) => p.type === 'day')?.value || `${now.getDate()}`);
+    const timelineStart = new Date(`${nowYear}-${pad(nowMonth)}-${pad(nowDay)}T00:00:00+05:30`);
 
-    const pad = (n: number) => String(n).padStart(2, '0');
-    // Start of today in IST (00:00:00+05:30)
-    const startDate = new Date(`${nowYear}-${pad(nowMonth)}-${pad(nowDay)}T00:00:00+05:30`);
-
-    // Latest deadline among hackathons
+    // Latest deadline among active hackathons
     const maxDeadlineMs = Math.max(
       ...hackathons.map((h) => new Date(h.deadline).getTime()),
-      startDate.getTime() + 3 * 24 * 60 * 60 * 1000 // At least 3 full days
+      timelineStart.getTime() + 24 * 60 * 60 * 1000 // At least 1 day
     );
-    const maxDeadlineDate = new Date(maxDeadlineMs);
 
-    const maxParts = istFormatter.formatToParts(maxDeadlineDate);
-    const maxYear = parseInt(maxParts.find((p) => p.type === 'year')?.value || `${maxDeadlineDate.getFullYear()}`);
-    const maxMonth = parseInt(maxParts.find((p) => p.type === 'month')?.value || `${maxDeadlineDate.getMonth() + 1}`);
-    const maxDay = parseInt(maxParts.find((p) => p.type === 'day')?.value || `${maxDeadlineDate.getDate()}`);
+    // Day of the last deadline in IST
+    const maxParts = istFormatter.formatToParts(new Date(maxDeadlineMs));
+    const maxYear = parseInt(maxParts.find((p) => p.type === 'year')?.value || `${maxDeadlineMs}`);
+    const maxMonth = parseInt(maxParts.find((p) => p.type === 'month')?.value || '10');
+    const maxDay = parseInt(maxParts.find((p) => p.type === 'day')?.value || '31');
 
-    // End of last deadline day in IST (23:59:59+05:30)
-    const endDate = new Date(`${maxYear}-${pad(maxMonth)}-${pad(maxDay)}T23:59:59+05:30`);
+    // Timeline ends at 24:00:00 IST of the last deadline's day (start of the next day)
+    const lastDayStart = new Date(`${maxYear}-${pad(maxMonth)}-${pad(maxDay)}T00:00:00+05:30`);
+    let timelineEnd = new Date(lastDayStart.getTime() + 24 * 60 * 60 * 1000);
 
-    // Generate day columns
+    // Safeguard duration
+    if (timelineEnd.getTime() <= timelineStart.getTime()) {
+      timelineEnd = new Date(timelineStart.getTime() + 24 * 60 * 60 * 1000);
+    }
+
+    const totalDurationMs = timelineEnd.getTime() - timelineStart.getTime();
+    const totalDays = Math.max(1, Math.round(totalDurationMs / (24 * 60 * 60 * 1000)));
+
+    // Generate exactly one column per 24-hour day slice
     const days: { label: string; date: Date }[] = [];
-    let cur = new Date(startDate.getTime());
-    while (cur.getTime() <= endDate.getTime() + 1000) {
+    for (let i = 0; i < totalDays; i++) {
+      const d = new Date(timelineStart.getTime() + i * 24 * 60 * 60 * 1000);
       const label = new Intl.DateTimeFormat('en-IN', {
         timeZone: 'Asia/Kolkata',
         weekday: 'short',
         day: 'numeric',
-      }).format(cur);
-      days.push({ label, date: new Date(cur.getTime()) });
-      cur = new Date(cur.getTime() + 24 * 60 * 60 * 1000);
+      }).format(d);
+      days.push({ label, date: d });
     }
 
-    const totalStartMs = startDate.getTime();
-    const totalEndMs = endDate.getTime();
-    const totalDurationMs = Math.max(1, totalEndMs - totalStartMs);
-
+    // Exact proportional percentage on the timeline scale
     const getPct = (timestampMs: number): number => {
-      const clamped = Math.max(totalStartMs, Math.min(totalEndMs, timestampMs));
-      return ((clamped - totalStartMs) / totalDurationMs) * 100;
+      const clamped = Math.max(timelineStart.getTime(), Math.min(timelineEnd.getTime(), timestampMs));
+      return ((clamped - timelineStart.getTime()) / totalDurationMs) * 100;
     };
 
     const nowPct = getPct(now.getTime());
 
     return {
       days,
-      totalStartMs,
-      totalEndMs,
+      totalDays,
+      timelineStart,
+      timelineEnd,
       totalDurationMs,
       getPct,
       nowPct,
@@ -92,7 +100,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
 
   if (hackathons.length === 0 || !timeline) {
     return (
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-8 text-center text-zinc-400 font-mono text-sm">
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-8 text-center text-zinc-400 font-mono text-xs">
         No active hackathons to plot on the timeline.
       </div>
     );
@@ -103,7 +111,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
     0
   );
 
-  // Card-matching urgency color for the hackathon deadline bars
+  // Urgency styling matching cards
   const getUrgencyClasses = (cd: Countdown) => {
     if (cd.isExpired) {
       return 'bg-zinc-800 border-zinc-700 text-zinc-400';
@@ -134,7 +142,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
           <button
             type="button"
             onClick={() => setShowDone((prev) => !prev)}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-950 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-800 bg-zinc-950 hover:bg-zinc-800 text-xs text-zinc-300 hover:text-white transition-colors"
           >
             {showDone ? (
               <EyeOff className="w-3.5 h-3.5 text-zinc-400" />
@@ -144,7 +152,8 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
             <span>{showDone ? 'Hide Done' : `Show Done (${totalDoneTasks})`}</span>
           </button>
 
-          <div className="hidden sm:flex items-center gap-3 text-[11px] text-zinc-400">
+          {/* Urgency Legend: font size bumped to 12px (text-xs) */}
+          <div className="hidden sm:flex items-center gap-3 text-xs text-zinc-300">
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" /> &gt;48h
             </span>
@@ -161,38 +170,41 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
       {/* Custom HTML + Tailwind Responsive Timeline */}
       <div className="w-full rounded-2xl border border-zinc-800 bg-zinc-950/90 shadow-2xl overflow-hidden">
         <div className="w-full overflow-x-auto no-scrollbar">
-          <div className="w-full min-w-[760px] flex flex-col divide-y divide-zinc-800/80">
+          <div className="w-full min-w-[760px] flex flex-col divide-y divide-zinc-800/80 relative">
             
             {/* Sticky Header Row */}
-            <div className="sticky top-0 z-40 flex items-stretch bg-zinc-900/95 backdrop-blur-md border-b border-zinc-800">
+            <div className="sticky top-0 z-40 flex items-stretch bg-zinc-900/95 backdrop-blur-md border-b border-zinc-800 h-11">
               {/* Left Fixed 200px Column: Hackathons Label */}
-              <div className="w-[200px] min-w-[200px] max-w-[200px] shrink-0 sticky left-0 z-50 bg-zinc-900 px-4 py-3 border-r border-zinc-800 flex items-center justify-between text-[13px] font-mono font-bold text-zinc-300">
+              <div className="w-[200px] min-w-[200px] max-w-[200px] shrink-0 sticky left-0 z-50 bg-zinc-900 px-4 py-2.5 border-r border-zinc-800 flex items-center justify-between text-[13px] font-mono font-bold text-zinc-200 shadow-sm">
                 <span className="truncate" title="Hackathons & Tasks">Hackathons</span>
-                <span className="text-[10px] text-zinc-400 font-normal">Tasks</span>
+                <span className="text-xs text-zinc-400 font-normal">Tasks</span>
               </div>
 
-              {/* Day Columns */}
+              {/* Day Columns: Exactly one 24-hour slice per column */}
               <div className="flex-1 relative flex items-stretch">
                 {timeline.days.map((day, idx) => (
                   <div
                     key={idx}
-                    className="flex-1 px-3 py-3 border-r border-zinc-800/60 last:border-r-0 flex items-center justify-center text-center"
+                    className="flex-1 px-2 border-r border-zinc-800/60 last:border-r-0 flex items-center justify-center text-center"
                   >
-                    <span className="text-[13px] font-mono font-semibold text-zinc-300 tracking-wide">
+                    <span className="text-[13px] font-mono font-semibold text-zinc-200 tracking-wide">
                       {day.label}
                     </span>
                   </div>
                 ))}
+              </div>
+            </div>
 
-                {/* Now Marker Pill in Header */}
-                <div
-                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-30 pointer-events-none"
-                  style={{ left: `${timeline.nowPct}%` }}
-                >
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500 text-zinc-950 shadow-md shadow-cyan-950">
-                    Now
-                  </span>
-                </div>
+            {/* Vertical Line for Right Now across the grid & Now Badge offset just below the header row */}
+            <div
+              className="absolute top-0 bottom-0 w-[2px] bg-cyan-400 z-30 pointer-events-none shadow-[0_0_10px_rgba(6,182,212,0.9)]"
+              style={{ left: `calc(200px + (100% - 200px) * ${timeline.nowPct / 100})` }}
+            >
+              {/* Now Badge sits cleanly just below the header row so the Mon 26 label is never covered */}
+              <div className="absolute top-[48px] -translate-x-1/2 z-40 pointer-events-none">
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500 text-zinc-950 shadow-md shadow-cyan-950">
+                  Now
+                </span>
               </div>
             </div>
 
@@ -204,7 +216,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
 
               // Bar starts at Now and ends at deadline
               const barLeft = Math.max(0, timeline.nowPct);
-              const barWidth = Math.max(2, deadlinePct - barLeft);
+              const barWidth = Math.max(1, deadlinePct - barLeft);
 
               const cdText = cd.isExpired
                 ? 'Closed'
@@ -222,7 +234,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
                   {/* Hackathon Parent Row */}
                   <div className="flex items-stretch min-h-[50px] relative">
                     {/* Fixed 200px Left Column: Hackathon Name */}
-                    <div className="w-[200px] min-w-[200px] max-w-[200px] shrink-0 sticky left-0 z-30 bg-zinc-950 px-4 py-2.5 border-r border-zinc-800 flex items-center justify-between gap-2 shadow-sm">
+                    <div className="w-[200px] min-w-[200px] max-w-[200px] shrink-0 sticky left-0 z-20 bg-zinc-950 px-4 py-2.5 border-r border-zinc-800 flex items-center justify-between gap-2 shadow-sm">
                       <div className="min-w-0 flex items-center gap-2">
                         <span
                           className="w-2.5 h-2.5 rounded-full shrink-0"
@@ -235,7 +247,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
                           {h.name}
                         </span>
                       </div>
-                      <span className="text-[10px] font-mono text-zinc-400 shrink-0">
+                      <span className="text-xs font-mono text-zinc-400 shrink-0">
                         {h.tasks.filter((t) => t.status === 'done').length}/{h.tasks.length}
                       </span>
                     </div>
@@ -252,12 +264,6 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
                         ))}
                       </div>
 
-                      {/* Thin Vertical Line for Right Now */}
-                      <div
-                        className="absolute top-0 bottom-0 w-[2px] bg-cyan-400 z-20 pointer-events-none shadow-[0_0_8px_rgba(6,182,212,0.9)]"
-                        style={{ left: `${timeline.nowPct}%` }}
-                      />
-
                       {/* Colored Urgency Bar from Now until Deadline */}
                       <div
                         className={`absolute h-8 rounded-xl border flex items-center z-10 transition-all ${getUrgencyClasses(
@@ -270,10 +276,11 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
                         title={`${h.name}: closes ${formatISTShort(h.deadline)} (${cdText})`}
                       >
                         <div className="px-3 flex items-center justify-between w-full min-w-0">
-                          <span className="text-[11px] font-mono font-bold truncate">
+                          {/* Duration text bumped to 12px (text-xs) */}
+                          <span className="text-xs font-mono font-bold truncate">
                             {cdText}
                           </span>
-                          <span className="hidden md:inline text-[10px] font-mono opacity-80 shrink-0 ml-1">
+                          <span className="hidden md:inline text-xs font-mono opacity-90 shrink-0 ml-2">
                             Closes {formatISTShort(h.deadline)}
                           </span>
                         </div>
@@ -301,19 +308,20 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
                         className="flex items-stretch min-h-[34px] border-t border-zinc-900 bg-zinc-950/40 hover:bg-zinc-900/40 transition-colors"
                       >
                         {/* Fixed 200px Left Column: Indented Task Title & Estimate */}
-                        <div className="w-[200px] min-w-[200px] max-w-[200px] shrink-0 sticky left-0 z-30 bg-zinc-950 pl-6 pr-3 py-1.5 border-r border-zinc-800 flex items-center justify-between gap-1.5 shadow-sm">
+                        <div className="w-[200px] min-w-[200px] max-w-[200px] shrink-0 sticky left-0 z-20 bg-zinc-950 pl-6 pr-3 py-1.5 border-r border-zinc-800 flex items-center justify-between gap-1.5 shadow-sm">
                           <div className="flex items-center gap-1.5 min-w-0">
                             {t.status === 'done' && (
-                              <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                             )}
                             {t.status === 'doing' && (
-                              <Play className="w-3 h-3 text-cyan-400 fill-current shrink-0" />
+                              <Play className="w-3.5 h-3.5 text-cyan-400 fill-current shrink-0" />
                             )}
                             {t.status === 'todo' && (
-                              <Clock className="w-3 h-3 text-zinc-500 shrink-0" />
+                              <Clock className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
                             )}
+                            {/* Task title bumped to 12px (text-xs) */}
                             <span
-                              className={`text-[11px] font-mono truncate ${
+                              className={`text-xs font-mono truncate ${
                                 t.status === 'done'
                                   ? 'text-zinc-500 line-through'
                                   : t.status === 'doing'
@@ -326,7 +334,8 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
                             </span>
                           </div>
 
-                          <span className="text-[10px] font-mono text-zinc-400 bg-zinc-900/90 px-1 py-0.5 rounded border border-zinc-800 shrink-0">
+                          {/* Task estimate bumped to 12px (text-xs) */}
+                          <span className="text-xs font-mono text-zinc-300 bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800 shrink-0">
                             {estHours}h
                           </span>
                         </div>
@@ -343,12 +352,6 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
                             ))}
                           </div>
 
-                          {/* Thin Vertical Line for Right Now */}
-                          <div
-                            className="absolute top-0 bottom-0 w-[2px] bg-cyan-400/80 z-20 pointer-events-none"
-                            style={{ left: `${timeline.nowPct}%` }}
-                          />
-
                           {/* Task Mini-Bar */}
                           <div
                             className={`absolute h-5 rounded-md border flex items-center px-2 z-10 transition-all ${
@@ -364,8 +367,9 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
                             }}
                             title={`${t.title} (${estHours}h) • Status: ${t.status}`}
                           >
-                            <span className="text-[10px] font-mono truncate">
-                              {t.title}
+                            {/* Task mini-bar text bumped to 12px (text-xs) */}
+                            <span className="text-xs font-mono truncate">
+                              {t.title} ({estHours}h)
                             </span>
                           </div>
                         </div>

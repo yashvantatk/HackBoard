@@ -138,30 +138,47 @@ export default function HackboardPage() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
-      if (
+      const isTargetTyping =
         target instanceof HTMLInputElement || 
         target instanceof HTMLTextAreaElement ||
         target?.tagName === 'INPUT' ||
         target?.tagName === 'TEXTAREA' ||
-        target?.isContentEditable
-      ) {
+        target?.isContentEditable;
+
+      const activeEl = typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null;
+      const isActiveTyping =
+        activeEl instanceof HTMLInputElement ||
+        activeEl instanceof HTMLTextAreaElement ||
+        activeEl?.tagName === 'INPUT' ||
+        activeEl?.tagName === 'TEXTAREA' ||
+        activeEl?.isContentEditable;
+
+      if (isTargetTyping || isActiveTyping) {
         return;
       }
 
-      if (e.key === '?') {
+      // Ignore single-key shortcuts when modifier keys (Ctrl/Meta/Alt) are pressed
+      if (e.ctrlKey || e.metaKey || e.altKey) {
+        return;
+      }
+
+      const key = (e.key || '').toLowerCase();
+      const code = e.code || '';
+
+      if (key === '?' || (e.shiftKey && code === 'Slash')) {
         e.preventDefault();
         setIsShortcutsOpen((prev) => !prev);
-      } else if (e.key.toLowerCase() === 'k') {
+      } else if (key === 'k' || code === 'KeyK') {
         e.preventDefault();
         setCurrentView((prev) => (prev === 'cards' ? 'kanban' : 'cards'));
-      } else if (e.key.toLowerCase() === 't') {
+      } else if (key === 't' || code === 'KeyT') {
         e.preventDefault();
         setCurrentView('timeline');
-      } else if (e.key.toLowerCase() === 'n') {
+      } else if (key === 'n' || code === 'KeyN') {
         e.preventDefault();
         setWhatNowAvailableHours(undefined);
         setIsWhatNowOpen(true);
-      } else if (e.key.toLowerCase() === 'r') {
+      } else if (key === 'r' || code === 'KeyR') {
         e.preventDefault();
         setIsRulesReaderOpen(true);
       }
