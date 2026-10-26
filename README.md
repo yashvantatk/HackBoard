@@ -29,15 +29,9 @@ I'm a student doing three or four hackathons at the same time. Deadlines, rules 
 
 ---
 
-## How I built it with Wispr Flow
-
-I dictated every Antigravity prompt, the commit messages, this README and the demo narration with Wispr Flow, and talked through each screen out loud instead of typing. I dictated [WORD COUNT] words in total during the build. The app is also designed for dictation: you speak a ramble and it turns it into hackathons, deadlines and tasks.
-
----
-
 ## Real usage
 
-I used it to run my own [NUMBER] live hackathons this week.
+I used it to run my own 3 live hackathons this week.
 
 ---
 
