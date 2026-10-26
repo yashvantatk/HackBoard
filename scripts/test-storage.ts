@@ -65,7 +65,7 @@ import {
   mergeHackathons,
   isTaskAlreadyInHackathon,
 } from '../src/lib/storage';
-import { encodeBoardToHash, decodeBoardFromHash } from '../src/lib/share';
+import { encodeBoardToHash, decodeBoardFromHash, parseShareHash } from '../src/lib/share';
 import { Hackathon } from '../src/types/index';
 
 let totalTests = 0;
@@ -281,16 +281,65 @@ const friendSharedBoard: Hackathon[] = [
 const encoded = encodeBoardToHash(friendSharedBoard);
 (globalThis as any).window.location.hash = `#shared=${encoded}`;
 
-// Decode from hash for read-only preview
-const previewData = decodeBoardFromHash();
-assert(previewData !== null && previewData.length === 2, 'Decoded shared board from URL hash');
+// Parse share hash into preview mode
+const parseResult = parseShareHash();
+assert(parseResult.status === 'success', 'parseShareHash returns status: success for valid hash');
+assert(
+  parseResult.status === 'success' && parseResult.hackathons.length === 2,
+  'Parsed share hash into preview mode with exact 2 hackathons'
+);
 
-// Check that localStorage was NOT overwritten by opening/previewing the link
+// Check that localStorage was NOT overwritten by parsing into preview mode
 const userStorageAfterPreview = mockStorage.getItem(STORAGE_KEY_V1);
 assert(
   userStorageBeforeShare === userStorageAfterPreview,
-  'Opening a share link does NOT overwrite user saved board in localStorage'
+  'Opening or parsing a share hash does NOT touch or overwrite localStorage'
 );
+
+// Test decoding when hash is URI-percent-encoded (%2B instead of +)
+const uriEncodedHash = `#shared=${encodeURIComponent(encoded)}`;
+const parseResultUri = parseShareHash(uriEncodedHash);
+assert(
+  parseResultUri.status === 'success' && parseResultUri.hackathons.length === 2,
+  'parseShareHash handles URI-percent-encoded share hashes seamlessly'
+);
+assert(
+  mockStorage.getItem(STORAGE_KEY_V1) === userStorageBeforeShare,
+  'URI-percent-encoded share hash parsing does NOT touch storage'
+);
+
+// Test malformed share hash: returns error status without touching storage
+const parseResultMalformed = parseShareHash('#shared=not_a_valid_lz_string_payload!@#$%');
+assert(
+  parseResultMalformed.status === 'error',
+  'parseShareHash returns status: error for malformed hash'
+);
+assert(
+  mockStorage.getItem(STORAGE_KEY_V1) === userStorageBeforeShare,
+  'Malformed share hash parsing does NOT touch storage'
+);
+
+// Test empty share hash: returns error status without touching storage
+const parseResultEmpty = parseShareHash('#shared=');
+assert(
+  parseResultEmpty.status === 'error',
+  'parseShareHash returns status: error for empty share payload'
+);
+assert(
+  mockStorage.getItem(STORAGE_KEY_V1) === userStorageBeforeShare,
+  'Empty share hash parsing does NOT touch storage'
+);
+
+// Test non-share hash (normal anchor): returns status none
+const parseResultNone = parseShareHash('#timeline-section');
+assert(
+  parseResultNone.status === 'none',
+  'parseShareHash returns status: none for non-share URL hash'
+);
+
+// Decode from hash for read-only preview (backward compatibility)
+const previewData = decodeBoardFromHash();
+assert(previewData !== null && previewData.length === 2, 'Decoded shared board from URL hash (decodeBoardFromHash)');
 
 // Now test importing/merging shared board into user board
 const currentBoard = getHackathons();

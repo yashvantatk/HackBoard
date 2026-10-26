@@ -37,36 +37,44 @@ export const HackathonGrid: React.FC<HackathonGridProps> = ({
         </div>
 
         <div className="space-y-2 max-w-md mx-auto">
-          <h3 className="text-lg font-bold text-white tracking-tight">No hackathons yet.</h3>
+          <h3 className="text-lg font-bold text-white tracking-tight">
+            {isReadOnly ? 'No hackathons on this shared board.' : 'No hackathons yet.'}
+          </h3>
           <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
-            Say or type something like, <span className="text-cyan-300 font-medium">&ldquo;{samplePrompt}&rdquo;</span>
+            {isReadOnly
+              ? 'Click "Back to my board" to return to your saved hackathons.'
+              : (
+                <>Say or type something like, <span className="text-cyan-300 font-medium">&ldquo;{samplePrompt}&rdquo;</span></>
+              )}
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
-          {onPopulatePrompt && (
+        {!isReadOnly && (
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+            {onPopulatePrompt && (
+              <button
+                type="button"
+                onClick={() => onPopulatePrompt(samplePrompt)}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-cyan-950/80 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-900 transition active:scale-95 shadow-sm"
+                title="Click to fill command bar with this sample"
+              >
+                <Mic className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Try: &ldquo;{samplePrompt}&rdquo;</span>
+                <CornerDownLeft className="w-3 h-3 text-cyan-500" />
+              </button>
+            )}
+
             <button
               type="button"
-              onClick={() => onPopulatePrompt(samplePrompt)}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-cyan-950/80 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-900 transition active:scale-95 shadow-sm"
-              title="Click to fill command bar with this sample"
+              onClick={onLoadSampleData}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 transition"
+              title="Add the sample hackathons back without wiping your own"
             >
-              <Mic className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Try: &ldquo;{samplePrompt}&rdquo;</span>
-              <CornerDownLeft className="w-3 h-3 text-cyan-500" />
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Load sample data</span>
             </button>
-          )}
-
-          <button
-            type="button"
-            onClick={onLoadSampleData}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 transition"
-            title="Add the sample hackathons back without wiping your own"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span>Load sample data</span>
-          </button>
-        </div>
+          </div>
+        )}
       </div>
     );
   }

@@ -14,11 +14,13 @@ import { formatISTShort, getCountdown } from '../lib/time';
 interface KanbanBoardProps {
   hackathons: Hackathon[];
   onUpdateTasks: (hackathonId: string, updatedTasks: Task[]) => void;
+  isReadOnly?: boolean;
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   hackathons,
   onUpdateTasks,
+  isReadOnly = false,
 }) => {
   const [activeHackathonId, setActiveHackathonId] = useState<string>(() => {
     return hackathons.length > 0 ? hackathons[0].id : '';
@@ -52,12 +54,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
   // Drag and Drop Handlers
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
+    if (isReadOnly) return;
     e.dataTransfer.setData('text/plain', taskId);
     setDraggedTaskId(taskId);
   };
 
   const handleDragOver = (e: React.DragEvent, status: TaskStatus) => {
     e.preventDefault();
+    if (isReadOnly) return;
     if (dragOverColumn !== status) {
       setDragOverColumn(status);
     }
@@ -69,6 +73,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
   const handleDrop = (e: React.DragEvent, targetStatus: TaskStatus) => {
     e.preventDefault();
+    if (isReadOnly) return;
     setDragOverColumn(null);
     const taskId = e.dataTransfer.getData('text/plain') || draggedTaskId;
     if (!taskId) return;
@@ -86,6 +91,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
   // Task Modifications
   const handleStatusChange = (taskId: string, nextStatus: TaskStatus) => {
+    if (isReadOnly) return;
     const updated = activeHackathon.tasks.map((t) => {
       if (t.id === taskId) {
         return { ...t, status: nextStatus };
@@ -96,6 +102,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   };
 
   const handleUpdateEstimate = (taskId: string, hours: number) => {
+    if (isReadOnly) return;
     const validHours = Math.max(0.5, hours);
     const updated = activeHackathon.tasks.map((t) => {
       if (t.id === taskId) {
@@ -107,11 +114,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   };
 
   const handleDeleteTask = (taskId: string) => {
+    if (isReadOnly) return;
     const updated = activeHackathon.tasks.filter((t) => t.id !== taskId);
     onUpdateTasks(activeHackathon.id, updated);
   };
 
   const handleAddQuickTask = (status: TaskStatus) => {
+    if (isReadOnly) return;
     const title = (newTaskInput[status] || '').trim();
     if (!title) return;
 
@@ -215,7 +224,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         </div>
 
         <div className="flex items-center gap-2 text-zinc-400 font-mono text-[11px]">
-          <span>Tip: Drag tasks between columns or voice dictate to move</span>
+          <span>
+            {isReadOnly
+              ? 'Read-only preview. Editing and drag-and-drop are disabled.'
+              : 'Tip: Drag tasks between columns or voice dictate to move'}
+          </span>
         </div>
       </div>
 
@@ -223,7 +236,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
         {columns.map((col) => {
           const hoursTotal = getColumnHours(col.tasks);
-          const isTarget = dragOverColumn === col.status;
+          const isTarget = !isReadOnly && dragOverColumn === col.status;
 
           return (
             <div
@@ -258,7 +271,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               <div className="flex-1 space-y-2.5 overflow-y-auto no-scrollbar">
                 {col.tasks.length === 0 ? (
                   <div className="h-32 border-2 border-dashed border-zinc-800/60 rounded-xl flex items-center justify-center text-center p-3 text-zinc-600 text-xs">
-                    Drop tasks here
+                    {isReadOnly ? 'No tasks in this column' : 'Drop tasks here'}
                   </div>
                 ) : (
                   col.tasks.map((task) => {
@@ -267,9 +280,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                     return (
                       <div
                         key={task.id}
-                        draggable
+                        draggable={!isReadOnly}
                         onDragStart={(e) => handleDragStart(e, task.id)}
-                        className="group relative rounded-xl bg-zinc-900/80 hover:bg-zinc-800/90 border border-zinc-800 hover:border-zinc-700 p-3 shadow-md transition cursor-grab active:cursor-grabbing space-y-2"
+                        className={`group relative rounded-xl bg-zinc-900/80 hover:bg-zinc-800/90 border border-zinc-800 hover:border-zinc-700 p-3 shadow-md transition space-y-2 ${
+                          isReadOnly ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
+                        }`}
                       >
                         {/* Title */}
                         <div className="flex items-start justify-between gap-2">
@@ -279,14 +294,16 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                             {task.title}
                           </p>
 
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteTask(task.id)}
-                            className="opacity-0 group-hover:opacity-100 p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-zinc-800 transition shrink-0"
-                            title="Delete task"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {!isReadOnly && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteTask(task.id)}
+                              className="opacity-0 group-hover:opacity-100 p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-zinc-800 transition shrink-0"
+                              title="Delete task"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
 
                         {/* Footer: Estimate Pill + Move Shortcuts */}
@@ -295,61 +312,65 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                           <div className="flex items-center gap-1 bg-zinc-950 px-2 py-0.5 rounded-md border border-zinc-800 text-zinc-300">
                             <Clock className="w-3 h-3 text-cyan-400" />
                             <span>{est}h</span>
-                            <div className="flex items-center gap-0.5 ml-1 border-l border-zinc-800 pl-1">
-                              <button
-                                type="button"
-                                onClick={() => handleUpdateEstimate(task.id, est + 1)}
-                                className="text-zinc-500 hover:text-white px-0.5"
-                                title="Add 1 hour estimate"
-                              >
-                                +
-                              </button>
-                              {est > 1 && (
+                            {!isReadOnly && (
+                              <div className="flex items-center gap-0.5 ml-1 border-l border-zinc-800 pl-1">
                                 <button
                                   type="button"
-                                  onClick={() => handleUpdateEstimate(task.id, est - 1)}
+                                  onClick={() => handleUpdateEstimate(task.id, est + 1)}
                                   className="text-zinc-500 hover:text-white px-0.5"
-                                  title="Reduce 1 hour estimate"
+                                  title="Add 1 hour estimate"
                                 >
-                                  -
+                                  +
                                 </button>
-                              )}
-                            </div>
+                                {est > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateEstimate(task.id, est - 1)}
+                                    className="text-zinc-500 hover:text-white px-0.5"
+                                    title="Reduce 1 hour estimate"
+                                  >
+                                    -
+                                  </button>
+                                )}
+                              </div>
+                            )}
                           </div>
 
                           {/* Quick Column Shift Buttons */}
-                          <div className="flex items-center gap-1">
-                            {col.status !== 'todo' && (
-                              <button
-                                type="button"
-                                onClick={() => handleStatusChange(task.id, 'todo')}
-                                className="px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition"
-                                title="Move to To-Do"
-                              >
-                                To-Do
-                              </button>
-                            )}
-                            {col.status !== 'doing' && (
-                              <button
-                                type="button"
-                                onClick={() => handleStatusChange(task.id, 'doing')}
-                                className="px-1.5 py-0.5 rounded bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800/40 transition"
-                                title="Move to Doing"
-                              >
-                                Doing
-                              </button>
-                            )}
-                            {col.status !== 'done' && (
-                              <button
-                                type="button"
-                                onClick={() => handleStatusChange(task.id, 'done')}
-                                className="px-1.5 py-0.5 rounded bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800/40 transition"
-                                title="Move to Done"
-                              >
-                                Done
-                              </button>
-                            )}
-                          </div>
+                          {!isReadOnly && (
+                            <div className="flex items-center gap-1">
+                              {col.status !== 'todo' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleStatusChange(task.id, 'todo')}
+                                  className="px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition"
+                                  title="Move to To-Do"
+                                >
+                                  To-Do
+                                </button>
+                              )}
+                              {col.status !== 'doing' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleStatusChange(task.id, 'doing')}
+                                  className="px-1.5 py-0.5 rounded bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800/40 transition"
+                                  title="Move to Doing"
+                                >
+                                  Doing
+                                </button>
+                              )}
+                              {col.status !== 'done' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleStatusChange(task.id, 'done')}
+                                  className="px-1.5 py-0.5 rounded bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800/40 transition"
+                                  title="Move to Done"
+                                >
+                                  Done
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -358,32 +379,36 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               </div>
 
               {/* Inline Quick Add Task */}
-              <div className="pt-3 mt-2 border-t border-zinc-800/60">
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="text"
-                    value={newTaskInput[col.status] || ''}
-                    onChange={(e) =>
-                      setNewTaskInput((prev) => ({ ...prev, [col.status]: e.target.value }))
-                    }
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleAddQuickTask(col.status);
+              {!isReadOnly && (
+                <div className="pt-3 mt-2 border-t border-zinc-800/60">
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={newTaskInput[col.status] || ''}
+                      onChange={(e) =>
+                        setNewTaskInput((prev) => ({ ...prev, [col.status]: e.target.value }))
                       }
-                    }}
-                    placeholder={`+ Add task to ${col.title}...`}
-                    className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-cyan-500 transition"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleAddQuickTask(col.status)}
-                    className="p-1 rounded-lg bg-zinc-800 hover:bg-cyan-500 hover:text-zinc-950 text-zinc-400 transition"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddQuickTask(col.status);
+                        }
+                      }}
+                      placeholder={`+ Add task to ${col.title}...`}
+                      className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-cyan-500 transition"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleAddQuickTask(col.status)}
+                      disabled={!(newTaskInput[col.status] || '').trim()}
+                      className="p-1.5 rounded-lg bg-zinc-800 hover:bg-cyan-500 hover:text-zinc-950 text-zinc-400 disabled:opacity-40 transition"
+                      title="Add task"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           );
         })}

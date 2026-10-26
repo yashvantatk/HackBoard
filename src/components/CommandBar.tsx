@@ -40,6 +40,7 @@ interface CommandBarProps {
   hackathons: Hackathon[];
   onExecuteCommand: (parsed: ParsedCommand, rawInput: string) => void;
   externalInput?: string;
+  isReadOnly?: boolean;
 }
 
 const EXAMPLE_CHIPS = [
@@ -77,6 +78,7 @@ export const CommandBar: React.FC<CommandBarProps> = ({
   hackathons,
   onExecuteCommand,
   externalInput,
+  isReadOnly = false,
 }) => {
   const [input, setInput] = useState('');
   const [isListening, setIsListening] = useState(false);
@@ -143,6 +145,7 @@ export const CommandBar: React.FC<CommandBarProps> = ({
   }, []);
 
   const runCommand = (textFromRef?: string, forceExecute = false) => {
+    if (isReadOnly) return;
     const rawText = textFromRef !== undefined
       ? textFromRef
       : (textareaRef.current?.value ?? input);
@@ -224,9 +227,11 @@ export const CommandBar: React.FC<CommandBarProps> = ({
           {/* Top Bar with Wispr badge & Mic indicator */}
           <div className="flex items-center justify-between pb-2 text-xs text-zinc-400">
             <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1.5 font-mono text-[11px] text-cyan-400 font-semibold uppercase tracking-wider">
+              <span className={`flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-wider ${
+                isReadOnly ? 'text-amber-400' : 'text-cyan-400'
+              }`}>
                 <Sparkles className="w-3.5 h-3.5" />
-                Wispr War Room Input
+                {isReadOnly ? 'Read-Only Shared Board' : 'Wispr War Room Input'}
               </span>
               {isListening && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-950 text-red-400 border border-red-500/40 animate-pulse">
@@ -237,9 +242,11 @@ export const CommandBar: React.FC<CommandBarProps> = ({
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-mono text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
-                <kbd className="text-zinc-200">Ctrl</kbd>+<kbd className="text-zinc-200">Enter</kbd> to execute
-              </span>
+              {!isReadOnly && (
+                <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-mono text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
+                  <kbd className="text-zinc-200">Ctrl</kbd>+<kbd className="text-zinc-200">Enter</kbd> to execute
+                </span>
+              )}
             </div>
           </div>
 
@@ -249,22 +256,31 @@ export const CommandBar: React.FC<CommandBarProps> = ({
               ref={textareaRef}
               rows={2}
               value={input}
+              disabled={isReadOnly}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') {
                   e.currentTarget.blur();
                 } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                   e.preventDefault();
-                  runCommand(textareaRef.current?.value);
+                  if (!isReadOnly) {
+                    runCommand(textareaRef.current?.value);
+                  }
                 }
               }}
-              placeholder="What's on my plate? Hold your Wispr key and talk."
-              className="w-full resize-none bg-transparent text-sm sm:text-base font-normal text-zinc-100 placeholder-zinc-500 focus:outline-none leading-relaxed transition-all min-h-[56px]"
+              placeholder={
+                isReadOnly
+                  ? "Viewing shared board in read-only mode. Click 'Import into my board' or 'Back to my board' to edit."
+                  : "What's on my plate? Hold your Wispr key and talk."
+              }
+              className={`w-full resize-none bg-transparent text-sm sm:text-base font-normal text-zinc-100 placeholder-zinc-500 focus:outline-none leading-relaxed transition-all min-h-[56px] ${
+                isReadOnly ? 'cursor-not-allowed opacity-60' : ''
+              }`}
             />
 
             {/* Action buttons (Mic + Run) */}
             <div className="flex items-center gap-1.5 shrink-0 self-end">
-              {hasSpeechSupport && (
+              {hasSpeechSupport && !isReadOnly && (
                 <button
                   type="button"
                   onClick={toggleBrowserDictation}
@@ -280,20 +296,22 @@ export const CommandBar: React.FC<CommandBarProps> = ({
               )}
 
               {/* Small hint next to Execute */}
-              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-mono text-zinc-400 px-1.5 py-1">
-                <kbd className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px]">Ctrl</kbd>
-                <span>+</span>
-                <kbd className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px]">Enter</kbd>
-              </span>
+              {!isReadOnly && (
+                <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-mono text-zinc-400 px-1.5 py-1">
+                  <kbd className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px]">Ctrl</kbd>
+                  <span>+</span>
+                  <kbd className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px]">Enter</kbd>
+                </span>
+              )}
 
               <button
                 type="button"
                 onClick={() => runCommand(textareaRef.current?.value)}
-                disabled={!input.trim()}
+                disabled={isReadOnly || !input.trim()}
                 className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl font-medium text-xs sm:text-sm transition-all duration-200 ${
-                  input.trim()
-                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold shadow-lg shadow-cyan-500/25 hover:from-cyan-400 hover:to-blue-500 active:scale-95'
-                    : 'bg-zinc-900 text-zinc-600 border border-zinc-800 cursor-not-allowed'
+                  isReadOnly || !input.trim()
+                    ? 'bg-zinc-900 text-zinc-600 border border-zinc-800 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold shadow-lg shadow-cyan-500/25 hover:from-cyan-400 hover:to-blue-500 active:scale-95'
                 }`}
               >
                 <span>Execute</span>
@@ -371,20 +389,22 @@ export const CommandBar: React.FC<CommandBarProps> = ({
       )}
 
       {/* Clickable Example Chips */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
-        <span className="text-zinc-500 font-mono text-[11px] shrink-0 mr-1">
-          Try rambling:
-        </span>
-        {EXAMPLE_CHIPS.map((chip, idx) => (
-          <button
-            key={idx}
-            onClick={() => handleChipClick(chip.prompt)}
-            className="shrink-0 px-2.5 py-1 rounded-lg bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-cyan-300 border border-zinc-800 hover:border-cyan-500/40 transition-all font-mono text-[11px] active:scale-95"
-          >
-            {chip.label}
-          </button>
-        ))}
-      </div>
+      {!isReadOnly && (
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+          <span className="text-zinc-500 font-mono text-[11px] shrink-0 mr-1">
+            Try rambling:
+          </span>
+          {EXAMPLE_CHIPS.map((chip, idx) => (
+            <button
+              key={idx}
+              onClick={() => handleChipClick(chip.prompt)}
+              className="shrink-0 px-2.5 py-1 rounded-lg bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-cyan-300 border border-zinc-800 hover:border-cyan-500/40 transition-all font-mono text-[11px] active:scale-95"
+            >
+              {chip.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

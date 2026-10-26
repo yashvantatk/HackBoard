@@ -33,7 +33,7 @@ import { StartFreshBanner } from '../components/StartFreshBanner';
 import { PastHackathonsDrawer } from '../components/PastHackathonsDrawer';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { downloadCalendarIcs } from '../lib/calendar';
-import { copyShareLink, decodeBoardFromHash, clearSharedHash } from '../lib/share';
+import { copyShareLink, clearSharedHash, parseShareHash } from '../lib/share';
 import { triggerCompletionConfetti, triggerMegaConfetti } from '../lib/confetti';
 import { formatIST } from '../lib/time';
 import { getOverbookedHackathons, getWhatNowRecommendation } from '../lib/whatnow';
@@ -80,21 +80,41 @@ export default function HackboardPage() {
     }
   };
 
+  const showNotification = useCallback(
+    (message: string, type: 'success' | 'info' | 'warning' = 'success') => {
+      setActionNotification({ message, type });
+      setTimeout(() => {
+        setActionNotification((prev) => (prev?.message === message ? null : prev));
+      }, 4500);
+    },
+    []
+  );
+
   // Sync state from storage or URL hash
   const reloadFromStorage = useCallback(() => {
     // Check if URL hash has shared board
-    const sharedData = decodeBoardFromHash();
-    if (sharedData && sharedData.length > 0) {
-      setHackathons(sharedData);
+    const parseResult = parseShareHash();
+
+    if (parseResult.status === 'success') {
+      setHackathons(parseResult.hackathons);
       setIsSharedView(true);
       setHistory(getHistory());
+      return;
+    }
+
+    if (parseResult.status === 'error') {
+      clearSharedHash();
+      setIsSharedView(false);
+      setHackathons(getHackathons());
+      setHistory(getHistory());
+      showNotification('Malformed or invalid share link. Loaded your saved board.', 'warning');
       return;
     }
 
     setIsSharedView(false);
     setHackathons(getHackathons());
     setHistory(getHistory());
-  }, []);
+  }, [showNotification]);
 
   useEffect(() => {
     setIsMounted(true);
@@ -189,13 +209,6 @@ export default function HackboardPage() {
     return getWhatNowRecommendation(activeHackathons, whatNowAvailableHours);
   }, [activeHackathons, whatNowAvailableHours]);
 
-  const showNotification = (message: string, type: 'success' | 'info' | 'warning' = 'success') => {
-    setActionNotification({ message, type });
-    setTimeout(() => {
-      setActionNotification((prev) => (prev?.message === message ? null : prev));
-    }, 4500);
-  };
-
   // Calendar Export
   const handleExportCalendar = () => {
     downloadCalendarIcs(activeHackathons);
@@ -209,6 +222,7 @@ export default function HackboardPage() {
 
   // Share Board
   const handleShareBoard = async () => {
+    if (isSharedView) return;
     await copyShareLink(hackathons);
     setIsCopiedShare(true);
     setTimeout(() => setIsCopiedShare(false), 2500);
@@ -223,6 +237,7 @@ export default function HackboardPage() {
     clearSharedHash();
     setIsSharedView(false);
     setHackathons(merged);
+    setHistory(getHistory());
     triggerCompletionConfetti();
     showNotification('Imported and merged shared board into your war room!', 'success');
   };
@@ -231,12 +246,17 @@ export default function HackboardPage() {
   const handleExitSharedView = () => {
     clearSharedHash();
     setIsSharedView(false);
-    reloadFromStorage();
+    setHackathons(getHackathons());
+    setHistory(getHistory());
     showNotification('Returned to your saved board.', 'info');
   };
 
   // Execute Parsed Command
   const handleExecuteCommand = (parsed: ParsedCommand, rawInput: string) => {
+    if (isSharedView) {
+      showNotification('Editing is disabled in preview mode. Click "Import into my board" to edit.', 'warning');
+      return;
+    }
     const currentHackathons = getHackathons();
 
     switch (parsed.type) {
@@ -473,6 +493,7 @@ export default function HackboardPage() {
   };
 
   const handleUpdateTasks = (hackathonId: string, updatedTasks: Task[]) => {
+    if (isSharedView) return;
     const current = getHackathons();
     const targetHackathon = current.find((h) => h.id === hackathonId);
     
@@ -499,6 +520,7 @@ export default function HackboardPage() {
   };
 
   const handleUpdateSingleTaskStatus = (hackathonId: string, taskId: string, status: TaskStatus) => {
+    if (isSharedView) return;
     const current = getHackathons();
     const updated = current.map((h) => {
       if (h.id === hackathonId) {
@@ -517,6 +539,7 @@ export default function HackboardPage() {
   };
 
   const handleAddHackathonFromRules = (newHackathon: Hackathon) => {
+    if (isSharedView) return;
     const current = getHackathons();
     saveHackathons([...current, newHackathon]);
     addHistoryEntry(
@@ -528,6 +551,7 @@ export default function HackboardPage() {
   };
 
   const handleDeleteHackathon = (hackathonId: string, hackathonName?: string) => {
+    if (isSharedView) return;
     const current = getHackathons();
     const target = current.find((h) => h.id === hackathonId);
     const displayName = hackathonName || target?.name || 'this hackathon';
@@ -554,6 +578,7 @@ export default function HackboardPage() {
   };
 
   const handleStartFresh = () => {
+    if (isSharedView) return;
     setConfirmModalConfig({
       isOpen: true,
       title: 'Start Fresh Board?',
@@ -572,6 +597,7 @@ export default function HackboardPage() {
   };
 
   const handleLoadSampleData = () => {
+    if (isSharedView) return;
     const merged = loadSampleData();
     setHackathons(merged);
     triggerCompletionConfetti();
@@ -584,6 +610,7 @@ export default function HackboardPage() {
   };
 
   const handleImportBackup = () => {
+    if (isSharedView) return;
     fileInputRef.current?.click();
   };
 
@@ -674,6 +701,7 @@ export default function HackboardPage() {
         onImportBackup={handleImportBackup}
         onOpenShortcuts={() => setIsShortcutsOpen(true)}
         isCopiedShare={isCopiedShare}
+        isReadOnly={isSharedView}
       />
 
       {/* Action Notification Toast Banner */}
@@ -718,41 +746,43 @@ export default function HackboardPage() {
           <StartFreshBanner onStartFresh={handleStartFresh} />
         )}
 
-        {/* Feature Five: Judge 60-Second Guided Tour Strip */}
-        <JudgeTourStrip
-          onStartTour={handleStartTour}
-          onEndTour={handleEndTour}
-          onRunStep1Command={(sampleText) => {
-            const parsed = {
-              type: 'update_hackathon' as const,
-              confidence: 'high' as const,
-              rawText: sampleText,
-              summary: 'Created "Nebius NVIDIA Hackathon" closing Oct 30 at 11:59 PM IST with 3 tasks.',
-              targetHackathonName: 'Nebius NVIDIA Hackathon',
-              deadlineIso: new Date('2026-10-30T23:59:59+05:30').toISOString(),
-              tasksToCreate: [
-                { title: 'Demo video', estimateHours: 2 },
-                { title: 'Devpost readme', estimateHours: 1 },
-                { title: 'Deploy frontend', estimateHours: 1 },
-              ],
-            };
-            handleExecuteCommand(parsed, sampleText);
-          }}
-          onOpenStep2WhatNow={() => {
-            setIsRulesReaderOpen(false);
-            setWhatNowAvailableHours(undefined);
-            setIsWhatNowOpen(true);
-          }}
-          onOpenStep3RulesReader={() => {
-            setIsWhatNowOpen(false);
-            setIsRulesReaderOpen(true);
-          }}
-          onSwitchStep4Timeline={() => {
-            setIsWhatNowOpen(false);
-            setIsRulesReaderOpen(false);
-            setCurrentView('timeline');
-          }}
-        />
+        {/* Feature Five: Judge 60-Second Guided Tour Strip (hidden in shared preview) */}
+        {!isSharedView && (
+          <JudgeTourStrip
+            onStartTour={handleStartTour}
+            onEndTour={handleEndTour}
+            onRunStep1Command={(sampleText) => {
+              const parsed = {
+                type: 'update_hackathon' as const,
+                confidence: 'high' as const,
+                rawText: sampleText,
+                summary: 'Created "Nebius NVIDIA Hackathon" closing Oct 30 at 11:59 PM IST with 3 tasks.',
+                targetHackathonName: 'Nebius NVIDIA Hackathon',
+                deadlineIso: new Date('2026-10-30T23:59:59+05:30').toISOString(),
+                tasksToCreate: [
+                  { title: 'Demo video', estimateHours: 2 },
+                  { title: 'Devpost readme', estimateHours: 1 },
+                  { title: 'Deploy frontend', estimateHours: 1 },
+                ],
+              };
+              handleExecuteCommand(parsed, sampleText);
+            }}
+            onOpenStep2WhatNow={() => {
+              setIsRulesReaderOpen(false);
+              setWhatNowAvailableHours(undefined);
+              setIsWhatNowOpen(true);
+            }}
+            onOpenStep3RulesReader={() => {
+              setIsWhatNowOpen(false);
+              setIsRulesReaderOpen(true);
+            }}
+            onSwitchStep4Timeline={() => {
+              setIsWhatNowOpen(false);
+              setIsRulesReaderOpen(false);
+              setCurrentView('timeline');
+            }}
+          />
+        )}
 
         {/* Overbooked Warning Banner */}
         <OverbookedBanner
@@ -769,6 +799,7 @@ export default function HackboardPage() {
             hackathons={activeHackathons}
             onExecuteCommand={handleExecuteCommand}
             externalInput={commandBarPrompt}
+            isReadOnly={isSharedView}
           />
         </section>
 
@@ -790,6 +821,7 @@ export default function HackboardPage() {
               <KanbanBoard
                 hackathons={activeHackathons}
                 onUpdateTasks={handleUpdateTasks}
+                isReadOnly={isSharedView}
               />
             )}
 

@@ -106,6 +106,7 @@ export const HackathonCard: React.FC<HackathonCardProps> = ({
   // Task actions
   const toggleTaskStatus = (taskId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isReadOnly) return;
     const updated = hackathon.tasks.map((t) => {
       if (t.id === taskId) {
         // Toggle between todo and done
@@ -119,6 +120,7 @@ export const HackathonCard: React.FC<HackathonCardProps> = ({
 
   const cycleTaskStatus = (taskId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isReadOnly) return;
     const updated = hackathon.tasks.map((t) => {
       if (t.id === taskId) {
         const nextMap: Record<TaskStatus, TaskStatus> = {
@@ -135,12 +137,14 @@ export const HackathonCard: React.FC<HackathonCardProps> = ({
 
   const deleteTask = (taskId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isReadOnly) return;
     const updated = hackathon.tasks.filter((t) => t.id !== taskId);
     onUpdateTasks(hackathon.id, updated);
   };
 
   const handleAddTask = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isReadOnly) return;
     const title = newTaskTitle.trim();
     if (!title) return;
 
@@ -332,15 +336,18 @@ export const HackathonCard: React.FC<HackathonCardProps> = ({
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
                       <button
                         type="button"
+                        disabled={isReadOnly}
                         onClick={(e) => toggleTaskStatus(task.id, e)}
                         className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 border transition ${
                           isDone
                             ? 'bg-emerald-500 border-emerald-500 text-zinc-950 shadow-sm shadow-emerald-500/40'
                             : isDoing
                             ? 'bg-blue-950 border-blue-400 text-blue-400'
+                            : isReadOnly
+                            ? 'border-zinc-700 bg-zinc-900 cursor-default'
                             : 'border-zinc-700 bg-zinc-900 hover:border-cyan-400'
                         }`}
-                        title={isDone ? 'Mark To-Do' : 'Mark Done'}
+                        title={isReadOnly ? 'Read-only preview' : isDone ? 'Mark To-Do' : 'Mark Done'}
                       >
                         {isDone && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                         {isDoing && <Play className="w-2.5 h-2.5 fill-current" />}
@@ -364,29 +371,32 @@ export const HackathonCard: React.FC<HackathonCardProps> = ({
 
                       <button
                         type="button"
+                        disabled={isReadOnly}
                         onClick={(e) => cycleTaskStatus(task.id, e)}
                         className={`text-[10px] font-mono uppercase font-bold px-2 py-0.5 rounded-md border transition ${
                           isDone
-                            ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40 hover:bg-emerald-900'
+                            ? `bg-emerald-950/80 text-emerald-300 border-emerald-500/40 ${isReadOnly ? 'cursor-default' : 'hover:bg-emerald-900'}`
                             : isDoing
-                            ? 'bg-blue-950/80 text-blue-300 border-blue-500/40 hover:bg-blue-900'
-                            : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-700 hover:text-white'
+                            ? `bg-blue-950/80 text-blue-300 border-blue-500/40 ${isReadOnly ? 'cursor-default' : 'hover:bg-blue-900'}`
+                            : `bg-zinc-800 text-zinc-400 border-zinc-700 ${isReadOnly ? 'cursor-default' : 'hover:bg-zinc-700 hover:text-white'}`
                         }`}
-                        title="Click to cycle status: To-Do → In Progress → Done"
+                        title={isReadOnly ? 'Read-only preview' : 'Click to cycle status: To-Do → In Progress → Done'}
                       >
                         {task.status === 'done' && 'Done'}
                         {task.status === 'doing' && 'In Progress'}
                         {task.status === 'todo' && 'To-Do'}
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={(e) => deleteTask(task.id, e)}
-                        className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition"
-                        title="Delete task"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={(e) => deleteTask(task.id, e)}
+                          className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition"
+                          title="Delete task"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -395,23 +405,25 @@ export const HackathonCard: React.FC<HackathonCardProps> = ({
           </div>
 
           {/* Quick Task Add Bar */}
-          <form onSubmit={handleAddTask} className="flex items-center gap-2 pt-2">
-            <input
-              type="text"
-              value={newTaskTitle}
-              onChange={(e) => setNewTaskTitle(e.target.value)}
-              placeholder="Add task to this hackathon..."
-              className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-cyan-500 transition"
-            />
-            <button
-              type="submit"
-              disabled={!newTaskTitle.trim()}
-              className="p-2 rounded-xl bg-zinc-800 hover:bg-cyan-500 hover:text-zinc-950 text-zinc-400 disabled:opacity-40 disabled:cursor-not-allowed transition"
-              title="Add task"
-            >
-              <Plus className="w-3.5 h-3.5" />
-            </button>
-          </form>
+          {!isReadOnly && (
+            <form onSubmit={handleAddTask} className="flex items-center gap-2 pt-2">
+              <input
+                type="text"
+                value={newTaskTitle}
+                onChange={(e) => setNewTaskTitle(e.target.value)}
+                placeholder="Add task to this hackathon..."
+                className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-cyan-500 transition"
+              />
+              <button
+                type="submit"
+                disabled={!newTaskTitle.trim()}
+                className="p-2 rounded-xl bg-zinc-800 hover:bg-cyan-500 hover:text-zinc-950 text-zinc-400 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                title="Add task"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            </form>
+          )}
 
           {/* Footer Delete Hackathon Option */}
           {!isReadOnly && (

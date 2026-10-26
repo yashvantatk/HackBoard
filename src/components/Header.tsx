@@ -42,6 +42,7 @@ interface HeaderProps {
   onImportBackup: () => void;
   onOpenShortcuts: () => void;
   isCopiedShare: boolean;
+  isReadOnly?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -60,6 +61,7 @@ export const Header: React.FC<HeaderProps> = ({
   onImportBackup,
   onOpenShortcuts,
   isCopiedShare,
+  isReadOnly = false,
 }) => {
   const [currentIstTime, setCurrentIstTime] = useState<string>('');
 
@@ -206,12 +208,15 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={onShareBoard}
+              disabled={isReadOnly}
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold transition border ${
-                isCopiedShare
+                isReadOnly
+                  ? 'bg-zinc-900/60 text-zinc-600 border-zinc-800 cursor-not-allowed opacity-50'
+                  : isCopiedShare
                   ? 'bg-emerald-950 text-emerald-300 border-emerald-500/60'
                   : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-800'
               }`}
-              title="Compress board into zero-server share link"
+              title={isReadOnly ? 'Sharing is disabled in preview mode' : 'Compress board into zero-server share link'}
             >
               {isCopiedShare ? (
                 <>
