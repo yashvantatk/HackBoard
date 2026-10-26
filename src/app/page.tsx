@@ -7,9 +7,15 @@ import {
   saveHackathons, 
   getHistory, 
   addHistoryEntry, 
-  resetToDemo, 
   clearHistory,
-  splitActiveAndPastHackathons
+  splitActiveAndPastHackathons,
+  startFreshBoard,
+  loadSampleData,
+  deleteHackathon,
+  downloadBackupFile,
+  importBackupData,
+  mergeHackathons,
+  isTaskAlreadyInHackathon
 } from '../lib/storage';
 import { Header } from '../components/Header';
 import { CommandBar } from '../components/CommandBar';
@@ -23,6 +29,7 @@ import { RulesReaderModal } from '../components/RulesReaderModal';
 import { OverbookedBanner } from '../components/OverbookedBanner';
 import { JudgeTourStrip } from '../components/JudgeTourStrip';
 import { SharedBoardBanner } from '../components/SharedBoardBanner';
+import { StartFreshBanner } from '../components/StartFreshBanner';
 import { PastHackathonsDrawer } from '../components/PastHackathonsDrawer';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { downloadCalendarIcs } from '../lib/calendar';
@@ -31,29 +38,6 @@ import { triggerCompletionConfetti, triggerMegaConfetti } from '../lib/confetti'
 import { formatIST } from '../lib/time';
 import { getOverbookedHackathons, getWhatNowRecommendation } from '../lib/whatnow';
 import { CheckCircle2, AlertCircle, Sparkles, X, Heart } from 'lucide-react';
-
-function normalizeTaskForComparison(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/\b(?:the|a|an)\b/gi, ' ')
-    .replace(/[^a-z0-9]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function isTaskAlreadyInHackathon(existingTasks: Task[], newTitle: string): boolean {
-  const normNew = normalizeTaskForComparison(newTitle);
-  if (!normNew) return false;
-
-  return existingTasks.some((t) => {
-    const normExisting = normalizeTaskForComparison(t.title);
-    if (normExisting === normNew) return true;
-    if (normExisting.includes(normNew) || normNew.includes(normExisting)) return true;
-    const newTokens = normNew.split(' ').filter((w) => w.length > 2);
-    if (newTokens.length > 0 && newTokens.every((w) => normExisting.includes(w))) return true;
-    return false;
-  });
-}
 
 export default function HackboardPage() {
   const [hackathons, setHackathons] = useState<Hackathon[]>([]);
@@ -65,7 +49,9 @@ export default function HackboardPage() {
   const [isSharedView, setIsSharedView] = useState(false);
   const [isCopiedShare, setIsCopiedShare] = useState(false);
   const [whatNowAvailableHours, setWhatNowAvailableHours] = useState<number | undefined>();
+  const [commandBarPrompt, setCommandBarPrompt] = useState<string>('');
   const [isMounted, setIsMounted] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [actionNotification, setActionNotification] = useState<{
     type: 'success' | 'info' | 'warning';
     message: string;
@@ -132,6 +118,11 @@ export default function HackboardPage() {
   // Split Active vs Past Hackathons (Feature Four: Time passing)
   const { active: activeHackathons, past: pastHackathons } = useMemo(() => {
     return splitActiveAndPastHackathons(hackathons);
+  }, [hackathons]);
+
+  // Check if any demo hackathons are on the board
+  const hasDemoData = useMemo(() => {
+    return hackathons.some((h) => h.isDemo || h.id.startsWith('demo-'));
   }, [hackathons]);
 
   // Global keyboard shortcuts: K (toggle view), T (timeline), N (What now), R (Rules reader), ? (Shortcuts)
@@ -224,19 +215,24 @@ export default function HackboardPage() {
     showNotification('Zero-server share link copied to clipboard!', 'info');
   };
 
-  // Import Shared Board to Local Storage
+  // Import Shared Board to Local Storage (merging without duplicates)
   const handleImportSharedBoard = () => {
-    saveHackathons(hackathons);
+    const userSaved = getHackathons();
+    const merged = mergeHackathons(userSaved, hackathons);
+    saveHackathons(merged);
     clearSharedHash();
     setIsSharedView(false);
+    setHackathons(merged);
     triggerCompletionConfetti();
-    showNotification('Imported shared board into your local browser war room!', 'success');
+    showNotification('Imported and merged shared board into your war room!', 'success');
   };
 
-  // Exit Shared View
+  // Exit Shared View (returns to user's saved board)
   const handleExitSharedView = () => {
     clearSharedHash();
+    setIsSharedView(false);
     reloadFromStorage();
+    showNotification('Returned to your saved board.', 'info');
   };
 
   // Execute Parsed Command
@@ -531,37 +527,95 @@ export default function HackboardPage() {
     showNotification(`Imported "${newHackathon.name}" with ${newHackathon.tasks.length} tasks.`, 'success');
   };
 
-  const handleDeleteHackathon = (hackathonId: string) => {
+  const handleDeleteHackathon = (hackathonId: string, hackathonName?: string) => {
     const current = getHackathons();
-    const removed = current.find((h) => h.id === hackathonId);
-    const updated = current.filter((h) => h.id !== hackathonId);
-    saveHackathons(updated);
+    const target = current.find((h) => h.id === hackathonId);
+    const displayName = hackathonName || target?.name || 'this hackathon';
 
-    if (removed) {
-      addHistoryEntry(
-        `Remove ${removed.name}`,
-        `Deleted hackathon "${removed.name}" from war room.`,
-        'update_hackathon'
-      );
-      showNotification(`Removed "${removed.name}" from your board.`, 'info');
-    }
-  };
-
-  const handleResetDemo = () => {
     setConfirmModalConfig({
       isOpen: true,
-      title: 'Reset Demo Board?',
-      message: 'This will restore the default demo hackathons (Meta Global AI, Nebius NVIDIA, Wispr Challenge) and reset task progress.',
-      confirmLabel: 'Reset Demo',
+      title: `Delete "${displayName}"?`,
+      message: `This will permanently remove "${displayName}" and all of its tasks from your board.`,
+      confirmLabel: 'Delete Hackathon',
       isDestructive: true,
-      icon: 'reset',
+      icon: 'alert',
       onConfirm: () => {
-        resetToDemo();
-        triggerCompletionConfetti();
-        showNotification('Preloaded demo board: Meta, Nebius NVIDIA, Wispr Challenge.', 'success');
+        const updated = deleteHackathon(hackathonId);
+        setHackathons(updated);
+        addHistoryEntry(
+          `Delete ${displayName}`,
+          `Deleted hackathon "${displayName}" and all its tasks from war room.`,
+          'update_hackathon'
+        );
+        showNotification(`Deleted "${displayName}" from your board.`, 'info');
         setConfirmModalConfig(null);
       },
     });
+  };
+
+  const handleStartFresh = () => {
+    setConfirmModalConfig({
+      isOpen: true,
+      title: 'Start Fresh Board?',
+      message: 'This will remove the sample hackathons and keep any hackathons or tasks you created.',
+      confirmLabel: 'Start Fresh',
+      isDestructive: true,
+      icon: 'reset',
+      onConfirm: () => {
+        const remaining = startFreshBoard();
+        setHackathons(remaining);
+        triggerCompletionConfetti();
+        showNotification('Sample data removed. Your war room is ready for your own hackathons!', 'success');
+        setConfirmModalConfig(null);
+      },
+    });
+  };
+
+  const handleLoadSampleData = () => {
+    const merged = loadSampleData();
+    setHackathons(merged);
+    triggerCompletionConfetti();
+    showNotification('Sample hackathons loaded without wiping your own.', 'success');
+  };
+
+  const handleExportBackup = () => {
+    downloadBackupFile();
+    showNotification('Exported complete backup (.json) file.', 'success');
+  };
+
+  const handleImportBackup = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileBackupChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const content = event.target?.result as string;
+        const parsed = JSON.parse(content);
+        const result = importBackupData(parsed);
+
+        if (result.success) {
+          reloadFromStorage();
+          triggerCompletionConfetti();
+          showNotification(
+            `Imported backup: ${result.hackathonsCount} hackathons, ${result.tasksCount} tasks.`,
+            'success'
+          );
+        } else {
+          showNotification(result.error || 'Failed to import backup.', 'warning');
+        }
+      } catch (err: unknown) {
+        const errorMsg = err instanceof Error ? err.message : 'Parse error';
+        showNotification('Invalid JSON file: ' + errorMsg, 'warning');
+      } finally {
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+    reader.readAsText(file);
   };
 
   const handleClearHistory = () => {
@@ -613,7 +667,11 @@ export default function HackboardPage() {
         onOpenRulesReader={() => setIsRulesReaderOpen(true)}
         onExportCalendar={handleExportCalendar}
         onShareBoard={handleShareBoard}
-        onResetDemo={handleResetDemo}
+        onLoadSampleData={handleLoadSampleData}
+        onStartFresh={handleStartFresh}
+        hasDemoData={hasDemoData}
+        onExportBackup={handleExportBackup}
+        onImportBackup={handleImportBackup}
         onOpenShortcuts={() => setIsShortcutsOpen(true)}
         isCopiedShare={isCopiedShare}
       />
@@ -653,6 +711,11 @@ export default function HackboardPage() {
             onImportToLocal={handleImportSharedBoard}
             onExitSharedView={handleExitSharedView}
           />
+        )}
+
+        {/* Start Fresh Banner (when demo hackathons are on board and not in shared view) */}
+        {!isSharedView && hasDemoData && (
+          <StartFreshBanner onStartFresh={handleStartFresh} />
         )}
 
         {/* Feature Five: Judge 60-Second Guided Tour Strip */}
@@ -705,6 +768,7 @@ export default function HackboardPage() {
           <CommandBar
             hackathons={activeHackathons}
             onExecuteCommand={handleExecuteCommand}
+            externalInput={commandBarPrompt}
           />
         </section>
 
@@ -716,7 +780,9 @@ export default function HackboardPage() {
                 hackathons={activeHackathons}
                 onUpdateTasks={handleUpdateTasks}
                 onDeleteHackathon={handleDeleteHackathon}
-                onResetDemo={handleResetDemo}
+                onLoadSampleData={handleLoadSampleData}
+                onPopulatePrompt={(prompt) => setCommandBarPrompt(prompt)}
+                isReadOnly={isSharedView}
               />
             )}
 
@@ -748,13 +814,29 @@ export default function HackboardPage() {
         </section>
       </main>
 
-      {/* Polish: Footer with GitHub link & Zero-Backend Info */}
+      {/* Footer with Privacy & Backup Info */}
       <footer className="relative z-10 border-t border-zinc-800/80 bg-zinc-950 py-6 text-xs text-zinc-500 font-mono">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span>Hackboard War Room</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span>Your data stays in this browser. Export a backup to move devices.</span>
             <span>•</span>
-            <span className="text-zinc-400">100% Local • Zero API Keys • Next.js Static Export</span>
+            <button
+              type="button"
+              onClick={handleExportBackup}
+              className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2 transition"
+              title="Download your full board data as JSON"
+            >
+              Export backup
+            </button>
+            <span>•</span>
+            <button
+              type="button"
+              onClick={handleImportBackup}
+              className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2 transition"
+              title="Import and merge a JSON backup"
+            >
+              Import backup
+            </button>
           </div>
 
           <div className="flex items-center gap-4">
@@ -776,6 +858,15 @@ export default function HackboardPage() {
           </div>
         </div>
       </footer>
+
+      {/* Hidden file input for backup restoration */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json,application/json"
+        className="hidden"
+        onChange={handleFileBackupChange}
+      />
 
       {/* What Now Focus Modal with Pomodoro Timer */}
       <WhatNowModal

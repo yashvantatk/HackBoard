@@ -18,13 +18,15 @@ import { formatIST, getCountdown, Countdown } from '../lib/time';
 interface HackathonCardProps {
   hackathon: Hackathon;
   onUpdateTasks: (hackathonId: string, updatedTasks: Task[]) => void;
-  onDeleteHackathon: (hackathonId: string) => void;
+  onDeleteHackathon: (hackathonId: string, hackathonName: string) => void;
+  isReadOnly?: boolean;
 }
 
 export const HackathonCard: React.FC<HackathonCardProps> = ({
   hackathon,
   onUpdateTasks,
   onDeleteHackathon,
+  isReadOnly = false,
 }) => {
   const [countdown, setCountdown] = useState<Countdown>(() => getCountdown(hackathon.deadline));
   const [isExpanded, setIsExpanded] = useState<boolean>(true);
@@ -169,6 +171,12 @@ export const HackathonCard: React.FC<HackathonCardProps> = ({
               <span className={`text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${urgencyStyles.badge}`}>
                 {urgencyStyles.badgeText}
               </span>
+
+              {(hackathon.isDemo || hackathon.id.startsWith('demo-')) && (
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-amber-500/50 bg-amber-950/80 text-amber-300">
+                  Demo
+                </span>
+              )}
 
               {hackathon.url && (
                 <a
@@ -406,19 +414,22 @@ export const HackathonCard: React.FC<HackathonCardProps> = ({
           </form>
 
           {/* Footer Delete Hackathon Option */}
-          <div className="flex items-center justify-end pt-1">
-            <button
-              onClick={() => {
-                if (confirm(`Remove "${hackathon.name}" from your board?`)) {
-                  onDeleteHackathon(hackathon.id);
-                }
-              }}
-              className="text-[11px] font-mono text-zinc-500 hover:text-rose-400 transition flex items-center gap-1"
-            >
-              <Trash2 className="w-3 h-3" />
-              <span>Remove Hackathon</span>
-            </button>
-          </div>
+          {!isReadOnly && (
+            <div className="flex items-center justify-end pt-1">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteHackathon(hackathon.id, hackathon.name);
+                }}
+                className="text-[11px] font-mono text-zinc-500 hover:text-rose-400 transition flex items-center gap-1"
+                title="Delete hackathon and all its tasks"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>Delete Hackathon</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

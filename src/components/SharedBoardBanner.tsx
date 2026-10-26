@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Copy, Eye } from 'lucide-react';
+import { Download, ArrowLeft, Eye } from 'lucide-react';
 
 interface SharedBoardBannerProps {
   onImportToLocal: () => void;
@@ -23,14 +23,14 @@ export const SharedBoardBanner: React.FC<SharedBoardBannerProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-mono uppercase font-bold tracking-widest px-2 py-0.5 rounded-full bg-blue-900/80 text-blue-200 border border-blue-500/40">
-                Shared Board View
+                Read-Only Preview
               </span>
               <h2 className="text-sm sm:text-base font-bold text-white tracking-tight">
-                You&apos;re viewing a shared board
+                Viewing a shared board.
               </h2>
             </div>
             <p className="text-xs text-blue-200/90 mt-0.5">
-              Decoded 100% locally from the URL hash. Zero servers or API keys involved.
+              Your saved board remains untouched. Import merges these hackathons into your board skipping duplicates.
             </p>
           </div>
         </div>
@@ -41,16 +41,17 @@ export const SharedBoardBanner: React.FC<SharedBoardBannerProps> = ({
             onClick={onImportToLocal}
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-zinc-950 bg-cyan-400 hover:bg-cyan-300 transition shadow-md shadow-cyan-400/25 active:scale-95"
           >
-            <Copy className="w-3.5 h-3.5" />
-            <span>Copy into My Board</span>
+            <Download className="w-3.5 h-3.5" />
+            <span>Import into my board</span>
           </button>
 
           <button
             type="button"
             onClick={onExitSharedView}
-            className="px-3 py-1.5 text-xs text-zinc-400 hover:text-white transition"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 transition"
           >
-            Exit Preview
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to my board</span>
           </button>
         </div>
       </div>

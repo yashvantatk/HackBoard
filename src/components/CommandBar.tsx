@@ -39,6 +39,7 @@ interface SpeechRecognitionLike {
 interface CommandBarProps {
   hackathons: Hackathon[];
   onExecuteCommand: (parsed: ParsedCommand, rawInput: string) => void;
+  externalInput?: string;
 }
 
 const EXAMPLE_CHIPS = [
@@ -75,6 +76,7 @@ const EXAMPLE_CHIPS = [
 export const CommandBar: React.FC<CommandBarProps> = ({
   hackathons,
   onExecuteCommand,
+  externalInput,
 }) => {
   const [input, setInput] = useState('');
   const [isListening, setIsListening] = useState(false);
@@ -82,6 +84,13 @@ export const CommandBar: React.FC<CommandBarProps> = ({
   const [hasSpeechSupport, setHasSpeechSupport] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+
+  useEffect(() => {
+    if (externalInput !== undefined && externalInput !== '') {
+      setInput(externalInput);
+      textareaRef.current?.focus();
+    }
+  }, [externalInput]);
 
   // Auto-grow textarea height
   useEffect(() => {

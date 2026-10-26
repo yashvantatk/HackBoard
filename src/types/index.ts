@@ -6,6 +6,7 @@ export interface Task {
   status: TaskStatus;
   createdAt: string;
   estimateHours?: number; // Optional estimate in hours (defaults to 1h)
+  isDemo?: boolean;
 }
 
 export interface Hackathon {
@@ -16,6 +17,7 @@ export interface Hackathon {
   tasks: Task[];
   createdAt: string;
   accentColor?: string;
+  isDemo?: boolean;
 }
 
 export type ActionType = 

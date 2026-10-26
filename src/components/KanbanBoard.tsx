@@ -30,10 +30,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
   const activeHackathon = hackathons.find((h) => h.id === activeHackathonId) || hackathons[0];
 
-  if (!activeHackathon) {
+  if (hackathons.length === 0 || !activeHackathon) {
     return (
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-8 text-center text-zinc-400">
-        No hackathons available for Kanban view.
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-8 sm:p-10 text-center space-y-3">
+        <h3 className="text-base font-bold text-white">No hackathons yet.</h3>
+        <p className="text-xs text-zinc-400 max-w-sm mx-auto">
+          Say or type something like, <span className="text-cyan-300 font-medium">&ldquo;add Smart India Hackathon, deadline November 5 at 11:59 PM&rdquo;</span> to start.
+        </p>
       </div>
     );
   }
@@ -182,6 +185,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               }`}
             >
               <span className="truncate max-w-[160px] sm:max-w-none">{h.name}</span>
+              {(h.isDemo || h.id.startsWith('demo-')) && (
+                <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-amber-950/80 text-amber-300 border border-amber-500/40">
+                  Demo
+                </span>
+              )}
               <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
                 {totalWork}h left
               </span>

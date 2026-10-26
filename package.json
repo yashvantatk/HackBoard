@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "tsx scripts/test-parser.ts"
+    "test": "tsx scripts/test-parser.ts && tsx scripts/test-storage.ts"
   },
   "dependencies": {
     "canvas-confetti": "^1.9.4",

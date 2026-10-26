@@ -18,6 +18,9 @@ import {
   Trophy,
   Share2,
   Download,
+  FolderInput,
+  Upload,
+  Sparkles,
   Check
 } from 'lucide-react';
 import { Hackathon, HistoryEntry } from '../types/index';
@@ -32,7 +35,11 @@ interface HeaderProps {
   onOpenRulesReader: () => void;
   onExportCalendar: () => void;
   onShareBoard: () => void;
-  onResetDemo: () => void;
+  onLoadSampleData: () => void;
+  onStartFresh?: () => void;
+  hasDemoData?: boolean;
+  onExportBackup: () => void;
+  onImportBackup: () => void;
   onOpenShortcuts: () => void;
   isCopiedShare: boolean;
 }
@@ -46,7 +53,11 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenRulesReader,
   onExportCalendar,
   onShareBoard,
-  onResetDemo,
+  onLoadSampleData,
+  onStartFresh,
+  hasDemoData = false,
+  onExportBackup,
+  onImportBackup,
   onOpenShortcuts,
   isCopiedShare,
 }) => {
@@ -215,14 +226,49 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </button>
 
-            {/* Reset Demo */}
+            {/* Start Fresh (Menu Option when demo data is present) */}
+            {hasDemoData && onStartFresh && (
+              <button
+                type="button"
+                onClick={onStartFresh}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-500/40 transition"
+                title="Remove sample data and start fresh with your own board"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Start fresh</span>
+              </button>
+            )}
+
+            {/* Load Sample Data */}
             <button
               type="button"
-              onClick={onResetDemo}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 transition"
-              title="Reset Demo Board"
+              onClick={onLoadSampleData}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 transition"
+              title="Add sample hackathons without wiping your own"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
+              <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden xl:inline">Load sample data</span>
+            </button>
+
+            {/* Export & Import Backup */}
+            <button
+              type="button"
+              onClick={onExportBackup}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 transition"
+              title="Export complete board backup as JSON"
+            >
+              <Upload className="w-3.5 h-3.5 text-zinc-400" />
+              <span className="hidden lg:inline">Backup</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onImportBackup}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 transition"
+              title="Import and merge backup JSON file"
+            >
+              <FolderInput className="w-3.5 h-3.5 text-zinc-400" />
+              <span className="hidden lg:inline">Restore</span>
             </button>
 
             {/* Help (?) */}

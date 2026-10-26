@@ -100,8 +100,11 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ hackathons }) => {
 
   if (hackathons.length === 0 || !timeline) {
     return (
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-8 text-center text-zinc-400 font-mono text-xs">
-        No active hackathons to plot on the timeline.
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-8 sm:p-10 text-center space-y-3">
+        <h3 className="text-base font-bold text-white">No hackathons yet.</h3>
+        <p className="text-xs text-zinc-400 max-w-sm mx-auto">
+          Say or type something like, <span className="text-cyan-300 font-medium">&ldquo;add Smart India Hackathon, deadline November 5 at 11:59 PM&rdquo;</span> to plot deadlines.
+        </p>
       </div>
     );
   }
